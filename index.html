@@ -481,6 +481,98 @@
   .btn-upload:hover { border-color: var(--accent); color: var(--accent); background: rgba(79,142,247,0.06); }
   .btn-upload input { display: none; }
 
+  /* Sync button (todos los usuarios) */
+  .btn-sync {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--surface2);
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 18px;
+    color: var(--text);
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  .btn-sync:hover { border-color: var(--accent); color: var(--accent); background: rgba(79,142,247,0.06); }
+  .btn-sync:disabled { opacity: 0.45; cursor: not-allowed; }
+  .btn-sync.syncing { border-color: var(--accent); color: var(--accent); }
+  @keyframes spin-icon { to { transform: rotate(360deg); } }
+  .btn-sync.syncing .sync-icon { display: inline-block; animation: spin-icon 0.8s linear infinite; }
+
+  /* GitHub config panel (solo admin) */
+  .github-config-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 24px;
+    margin-bottom: 16px;
+  }
+  .github-config-title {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .github-config-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+  .github-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 600px) { .github-fields { grid-template-columns: 1fr; } }
+  .github-field label {
+    display: block;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .github-field input {
+    width: 100%;
+    background: var(--bg);
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 13px;
+    color: var(--text);
+    font-size: 13px;
+    font-family: 'DM Sans', sans-serif;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .github-field input:focus { border-color: var(--accent); }
+  .github-field input::placeholder { color: var(--muted); }
+  .github-config-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 14px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .btn-save-config {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border: none;
+    border-radius: 8px;
+    padding: 9px 20px;
+    color: #fff;
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: opacity 0.2s;
+  }
+  .btn-save-config:hover { opacity: 0.88; }
+  .github-status { font-size: 12px; color: var(--muted); }
+  .github-status.ok  { color: var(--green); }
+  .github-status.err { color: var(--red); }
+
   /* Upload loading overlay */
   .upload-overlay {
     display: none;
@@ -1491,20 +1583,57 @@
   <div class="toast" id="toast"></div>
 
   <div id="mainSearchContent">
+
+  <!-- Panel de configuración GitHub: solo visible para Admin -->
+  <div class="github-config-card" id="githubConfigCard" style="display:none">
+    <div class="github-config-title">⚙️ Sincronización automática via GitHub</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.6">
+      Configura la ruta del archivo Excel en tu repositorio. Los usuarios descargarán los datos automáticamente al iniciar sesión.
+    </p>
+    <div class="github-fields">
+      <div class="github-field">
+        <label>Usuario / Organización de GitHub</label>
+        <input type="text" id="ghOwner" placeholder="Ej. Mutuclub" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="github-field">
+        <label>Nombre del repositorio</label>
+        <input type="text" id="ghRepo" placeholder="Ej. consulta_polizas" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="github-field">
+        <label>Rama (branch)</label>
+        <input type="text" id="ghBranch" placeholder="main" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="github-field">
+        <label>Ruta del archivo Excel en el repo</label>
+        <input type="text" id="ghPath" placeholder="Ej. CONSULTA_POLIZAS.xlsx" autocomplete="off" spellcheck="false">
+      </div>
+    </div>
+    <div class="github-config-actions">
+      <button class="btn-save-config" onclick="guardarConfigGitHub()">💾 Guardar configuración</button>
+      <button class="btn-sync" onclick="sincronizarDesdeGitHub(true)" id="btnTestSync">🔗 Probar conexión</button>
+      <span class="github-status" id="githubStatus"></span>
+    </div>
+  </div>
+
   <div class="update-bar">
     <div class="db-info">
       <div class="db-freshness-dot unknown" id="dbFreshnessDot"></div>
       <div class="db-info-text">
         <div class="db-label">Base de datos</div>
-        <div class="db-count" id="dbCount">10,170 pólizas</div>
+        <div class="db-count" id="dbCount">Sin datos cargados</div>
         <div class="db-date" id="dbDate">Datos originales del sistema</div>
         <div class="db-freshness-label unknown" id="dbFreshnessLabel">Sin fecha de actualización</div>
       </div>
     </div>
-    <label class="btn-upload" id="btnUpload" style="display:none">
-      📂 Cargar nuevo Excel
-      <input type="file" id="fileInput" accept=".xlsx,.xls" onchange="cargarExcel(this)">
-    </label>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <button class="btn-sync" id="btnSyncGH" onclick="sincronizarDesdeGitHub(true)" title="Descargar datos actualizados desde GitHub">
+        <span class="sync-icon">🔄</span> Verificar actualización
+      </button>
+      <label class="btn-upload" id="btnUpload" style="display:none">
+        📂 Cargar nuevo Excel
+        <input type="file" id="fileInput" accept=".xlsx,.xls" onchange="cargarExcel(this)">
+      </label>
+    </div>
   </div>
 
 <div class="search-card">
@@ -1729,6 +1858,9 @@ async function doLogin() {
   // Show upload button only for admin
   document.getElementById('btnUpload').style.display = user.role === 'admin' ? '' : 'none';
 
+  // Mostrar panel GitHub solo para admin
+  document.getElementById('githubConfigCard').style.display = user.role === 'admin' ? '' : 'none';
+
   // Show admin nav only for admin
   const adminNav = document.getElementById('adminNav');
   if (user.role === 'admin') {
@@ -1740,9 +1872,14 @@ async function doLogin() {
     document.getElementById('mainSearchContent').style.display = '';
     // Sync USERS from managed storage
     syncUsersLookup();
+    // Cargar campos de configuración guardados
+    cargarConfigGitHub();
   } else {
     adminNav.classList.remove('visible');
   }
+
+  // Auto-sync desde GitHub al iniciar sesión (todos los usuarios, silencioso)
+  sincronizarDesdeGitHub(false);
 }
 
 // ── Tab switcher (admin only) ─────────────────────────────
@@ -2865,6 +3002,224 @@ function renderBitacora() {
       </div>
     </div>
   `).join('');
+}
+
+// ── GitHub Sync ───────────────────────────────────────────────────────────────
+const LS_GH_CONFIG = 'artsNova_gh_config';
+const LS_GH_SHA    = 'artsNova_gh_last_sha';
+
+function getConfigGitHub() {
+  try {
+    const raw = localStorage.getItem(LS_GH_CONFIG);
+    return raw ? JSON.parse(raw) : null;
+  } catch(e) { return null; }
+}
+
+function cargarConfigGitHub() {
+  const cfg = getConfigGitHub();
+  if (!cfg) return;
+  document.getElementById('ghOwner').value  = cfg.owner  || '';
+  document.getElementById('ghRepo').value   = cfg.repo   || '';
+  document.getElementById('ghBranch').value = cfg.branch || 'main';
+  document.getElementById('ghPath').value   = cfg.path   || '';
+}
+
+function guardarConfigGitHub() {
+  const owner  = document.getElementById('ghOwner').value.trim();
+  const repo   = document.getElementById('ghRepo').value.trim();
+  const branch = document.getElementById('ghBranch').value.trim() || 'main';
+  const path   = document.getElementById('ghPath').value.trim();
+  if (!owner || !repo || !path) {
+    setGithubStatus('err', '⚠️ Completa todos los campos');
+    return;
+  }
+  // Resetear SHA guardado para forzar descarga con la nueva config
+  localStorage.removeItem(LS_GH_SHA);
+  localStorage.setItem(LS_GH_CONFIG, JSON.stringify({ owner, repo, branch, path }));
+  setGithubStatus('ok', '✅ Configuración guardada');
+  setTimeout(() => setGithubStatus('', ''), 3000);
+}
+
+function setGithubStatus(type, msg) {
+  const el = document.getElementById('githubStatus');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'github-status' + (type ? ' ' + type : '');
+}
+
+function setSyncBtnState(loading) {
+  const btn = document.getElementById('btnSyncGH');
+  if (!btn) return;
+  if (loading) {
+    btn.classList.add('syncing');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="sync-icon">🔄</span> Verificando...';
+  } else {
+    btn.classList.remove('syncing');
+    btn.disabled = false;
+    btn.innerHTML = '<span class="sync-icon">🔄</span> Verificar actualización';
+  }
+}
+
+/**
+ * Descarga el Excel desde GitHub usando la URL raw directa (sin API).
+ * Evita problemas de CORS y rate-limit de la API de GitHub.
+ * @param {boolean} manual - true: muestra feedback aunque no haya cambios.
+ */
+async function sincronizarDesdeGitHub(manual = false) {
+  const cfg = getConfigGitHub();
+  if (!cfg || !cfg.owner || !cfg.repo || !cfg.path) {
+    if (manual) showToast('⚙️ Configura primero la ruta del archivo en GitHub');
+    return;
+  }
+
+  const branch = cfg.branch || 'main';
+
+  setSyncBtnState(true);
+  if (manual) setGithubStatus('', '🔄 Consultando GitHub...');
+
+  try {
+    // Usar la URL raw con cache-busting para evitar que el navegador
+    // devuelva una versión cacheada del archivo.
+    const cacheBuster = Date.now();
+    const rawUrl = `https://raw.githubusercontent.com/${cfg.owner}/${cfg.repo}/${branch}/${cfg.path}?t=${cacheBuster}`;
+
+    const fileRes = await fetch(rawUrl, { cache: 'no-store' });
+
+    if (!fileRes.ok) {
+      if (fileRes.status === 404) throw new Error('Archivo no encontrado. Verifica la ruta y el nombre exacto.');
+      throw new Error(`Error al descargar (HTTP ${fileRes.status})`);
+    }
+
+    // Leer como ArrayBuffer para detectar si realmente cambió
+    const arrayBuffer = await fileRes.arrayBuffer();
+
+    // Calcular un hash rápido del contenido para comparar versiones
+    const hashBuf = await crypto.subtle.digest('SHA-256', arrayBuffer);
+    const hashHex = Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2,'0')).join('');
+    const localHash = localStorage.getItem(LS_GH_SHA) || '';
+
+    if (hashHex === localHash) {
+      setSyncBtnState(false);
+      if (manual) {
+        setGithubStatus('ok', '✅ Ya tienes la versión más reciente');
+        showToast('✅ Base de datos ya está al día');
+        setTimeout(() => setGithubStatus('', ''), 4000);
+      }
+      return;
+    }
+
+    // Hay versión nueva → procesar con SheetJS
+    if (!manual) document.getElementById('uploadOverlay').classList.add('active');
+    if (manual) setGithubStatus('', '⬇️ Procesando datos...');
+
+    await new Promise((resolve, reject) => {
+      loadSheetJS(() => {
+        try {
+          const wb = XLSX.read(arrayBuffer, { type: 'array', cellDates: true });
+          const sheetName = wb.SheetNames.find(n => n.toUpperCase().includes('DATO')) || wb.SheetNames[0];
+          const ws   = wb.Sheets[sheetName];
+          const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+          const newDB = {};
+          for (const row of rows) {
+            const r = {};
+            for (const k in row) r[k.trim()] = row[k];
+            const poliza = String(r['POLIZA.1'] || r['POLIZA'] || '').trim().toUpperCase();
+            if (!poliza || poliza.startsWith('=')) continue;
+
+            let modelo = r['MODELO'];
+            if (modelo instanceof Date) {
+              const base = new Date(1900, 0, 1);
+              modelo = String(Math.round((modelo - base) / 86400000) + 2);
+            } else { modelo = String(modelo || '').trim(); }
+
+            const fmtDate = v => {
+              if (!v) return '';
+              if (v instanceof Date) {
+                const d = String(v.getDate()).padStart(2,'0');
+                const m = String(v.getMonth()+1).padStart(2,'0');
+                return d+'/'+m+'/'+v.getFullYear();
+              }
+              return String(v).trim();
+            };
+            const estatus = String(r['ESTATUS'] || '').trim();
+            if (['#¡DIV/0!','#¡VALOR!','#DIV/0!','#VALUE!'].includes(estatus)) continue;
+            const c = v => {
+              if (v === null || v === undefined) return '';
+              if (v instanceof Date) return fmtDate(v);
+              const s = String(v).trim();
+              return s === 'undefined' ? '' : s;
+            };
+
+            newDB[poliza] = {
+              POLIZA: poliza,
+              NOMBRE: c(r['NOMBRE CLIENTE']),
+              TELEFONO: c(r['TELEFONO']).replace('.0',''),
+              ESTATUS: estatus,
+              COBERTURA: c(r['COBERTURA']),
+              'TIPO DE POLIZA': c(r['TIPO DE POLIZA']),
+              ASESOR: c(r['ASESOR']),
+              MARCA: c(r['MARCA']),
+              MODELO: modelo,
+              TIPO: c(r['TIPO VEHICULO']),
+              MOTOR: c(r['MOTOR']),
+              COLOR: c(r['COLOR']),
+              PLACAS: c(r['PLACAS']),
+              SERIE: c(r['SERIE']),
+              'INICIO VIGENCIA': fmtDate(r['INICIO VIGENCIA']),
+              'TERMINO VIGENCIA': fmtDate(r['FIN VIGENCIA']),
+              'TIPO COBRO': c(r['TIPO DE COBRO']),
+              COBRADOR: c(r['COBRADOR']),
+              'NOTAS ESTATUS': c(r['NOTAS ESTATUS']),
+              NOTAS: (() => { const n = c(r['NOTAS']); return n === '00/01/1900' ? '' : n; })(),
+            };
+          }
+
+          const count = Object.keys(newDB).length;
+          if (count === 0) throw new Error('No se encontraron pólizas en el archivo descargado');
+
+          DB = newDB;
+          rebuildIndex();
+          const now = new Date();
+          const dateStr = now.toLocaleDateString('es-MX', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+          document.getElementById('dbCount').textContent = count.toLocaleString('es-MX') + ' pólizas';
+          document.getElementById('dbDate').textContent  = 'Actualizado: ' + dateStr;
+          guardarEnLocal(DB, count, dateStr);
+          updateFreshnessUI(now);
+
+          // Guardar hash del archivo para detectar cambios futuros
+          localStorage.setItem(LS_GH_SHA, hashHex);
+
+          // Limpiar resultado anterior
+          document.getElementById('result').classList.remove('visible');
+          document.getElementById('notFound').classList.remove('visible');
+          document.getElementById('multiResults').style.display = 'none';
+
+          resolve(count);
+        } catch(err) { reject(err); }
+      });
+    });
+
+    document.getElementById('uploadOverlay').classList.remove('active');
+    setSyncBtnState(false);
+
+    if (manual) {
+      setGithubStatus('ok', '✅ Datos actualizados correctamente');
+      setTimeout(() => setGithubStatus('', ''), 5000);
+    }
+    showToast('✅ Base de datos actualizada desde GitHub');
+
+  } catch(err) {
+    document.getElementById('uploadOverlay').classList.remove('active');
+    setSyncBtnState(false);
+    console.warn('Error al sincronizar desde GitHub:', err);
+    if (manual) {
+      setGithubStatus('err', '❌ ' + err.message);
+      showToast('❌ ' + err.message);
+      setTimeout(() => setGithubStatus('', ''), 6000);
+    }
+  }
 }
 
 </script>
