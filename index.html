@@ -2421,6 +2421,9 @@ function cargarExcel(input) {
         document.getElementById('notFound').classList.remove('visible');
 
         showToast('✅ ' + count.toLocaleString('es-MX') + ' pólizas cargadas correctamente');
+
+        // Subir automáticamente a GitHub para sincronizar con todos los usuarios
+        subirExcelAGitHub(e.target.result, file.name);
       } catch(err) {
         document.getElementById('uploadOverlay').classList.remove('active');
         input.value = '';
@@ -3004,6 +3007,75 @@ function renderBitacora() {
   `).join('');
 }
 
+// ── Subida automática a GitHub ────────────────────────────────────────────────
+const GH_TOKEN  = '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';
+const GH_OWNER  = 'Mutuclub';
+const GH_REPO   = 'consulta_polizas';
+const GH_BRANCH = 'main';
+const GH_FILE   = 'CONSULTA_POLIZAS.xlsx';
+
+async function subirExcelAGitHub(arrayBuffer, nombreArchivo) {
+  try {
+    // Convertir ArrayBuffer a Base64
+    const bytes = new Uint8Array(arrayBuffer);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+    const base64 = btoa(binary);
+
+    const apiUrl = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${GH_FILE}`;
+
+    // Obtener el SHA actual del archivo (necesario para actualizarlo)
+    let sha = null;
+    try {
+      const getRes = await fetch(apiUrl, {
+        headers: {
+          'Authorization': `token ${GH_TOKEN}`,
+          'Accept': 'application/vnd.github.v3+json'
+        }
+      });
+      if (getRes.ok) {
+        const data = await getRes.json();
+        sha = data.sha;
+      }
+    } catch(e) { /* archivo nuevo, sin SHA */ }
+
+    // Subir el archivo
+    const body = {
+      message: `Actualización de pólizas: ${new Date().toLocaleString('es-MX')}`,
+      content: base64,
+      branch: GH_BRANCH
+    };
+    if (sha) body.sha = sha;
+
+    const putRes = await fetch(apiUrl, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `token ${GH_TOKEN}`,
+        'Accept': 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (!putRes.ok) {
+      const err = await putRes.json();
+      console.warn('Error al subir a GitHub:', err.message);
+      showToast('⚠️ Datos cargados localmente, pero no se pudo sincronizar con GitHub');
+      return;
+    }
+
+    // Actualizar el hash local para que no se descargue de nuevo innecesariamente
+    const hashBuf = await crypto.subtle.digest('SHA-256', arrayBuffer);
+    const hashHex = Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2,'0')).join('');
+    localStorage.setItem(LS_GH_SHA, hashHex);
+
+    showToast('☁️ Base de datos sincronizada con GitHub');
+  } catch(err) {
+    console.warn('Error al sincronizar con GitHub:', err);
+    showToast('⚠️ Datos cargados localmente, error al sincronizar con GitHub');
+  }
+}
+
 // ── GitHub Sync ───────────────────────────────────────────────────────────────
 const LS_GH_CONFIG = 'artsNova_gh_config';
 const LS_GH_SHA    = 'artsNova_gh_last_sha';
@@ -3067,22 +3139,12 @@ function setSyncBtnState(loading) {
  * @param {boolean} manual - true: muestra feedback aunque no haya cambios.
  */
 async function sincronizarDesdeGitHub(manual = false) {
-  const cfg = getConfigGitHub();
-  if (!cfg || !cfg.owner || !cfg.repo || !cfg.path) {
-    if (manual) showToast('⚙️ Configura primero la ruta del archivo en GitHub');
-    return;
-  }
-
-  const branch = cfg.branch || 'main';
-
   setSyncBtnState(true);
   if (manual) setGithubStatus('', '🔄 Consultando GitHub...');
 
   try {
-    // Usar la URL raw con cache-busting para evitar que el navegador
-    // devuelva una versión cacheada del archivo.
     const cacheBuster = Date.now();
-    const rawUrl = `https://raw.githubusercontent.com/${cfg.owner}/${cfg.repo}/${branch}/${cfg.path}?t=${cacheBuster}`;
+    const rawUrl = `https://raw.githubusercontent.com/${GH_OWNER}/${GH_REPO}/${GH_BRANCH}/${GH_FILE}?t=${cacheBuster}`;
 
     const fileRes = await fetch(rawUrl, { cache: 'no-store' });
 
