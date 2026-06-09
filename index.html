@@ -1584,33 +1584,47 @@
 
   <div id="mainSearchContent">
 
-  <!-- Panel de configuración GitHub: solo visible para Admin -->
+  <!-- Panel de instrucciones GitHub: solo visible para Admin -->
   <div class="github-config-card" id="githubConfigCard" style="display:none">
-    <div class="github-config-title">⚙️ Sincronización automática via GitHub</div>
-    <p style="font-size:13px;color:var(--muted);margin-bottom:14px;line-height:1.6">
-      Configura la ruta del archivo Excel en tu repositorio. Los usuarios descargarán los datos automáticamente al iniciar sesión.
+    <div class="github-config-title">☁️ Cómo actualizar la base de datos para todos los usuarios</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:16px;line-height:1.6">
+      Cuando tengas un nuevo Excel de pólizas, sigue estos pasos para que <strong style="color:var(--text)">todos los usuarios</strong> vean los datos actualizados automáticamente al iniciar sesión.
     </p>
-    <div class="github-fields">
-      <div class="github-field">
-        <label>Usuario / Organización de GitHub</label>
-        <input type="text" id="ghOwner" placeholder="Ej. Mutuclub" autocomplete="off" spellcheck="false">
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px">
+      <div style="display:flex;gap:12px;align-items:flex-start;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+        <span style="font-size:18px;min-width:28px">1️⃣</span>
+        <div>
+          <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px">Entra a GitHub</div>
+          <div style="font-size:12px;color:var(--muted)">Ve a <a href="https://github.com/Mutuclub/consulta_polizas" target="_blank" style="color:var(--accent);text-decoration:none">github.com/Mutuclub/consulta_polizas</a> e inicia sesión con la cuenta de Mutuclub.</div>
+        </div>
       </div>
-      <div class="github-field">
-        <label>Nombre del repositorio</label>
-        <input type="text" id="ghRepo" placeholder="Ej. consulta_polizas" autocomplete="off" spellcheck="false">
+      <div style="display:flex;gap:12px;align-items:flex-start;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+        <span style="font-size:18px;min-width:28px">2️⃣</span>
+        <div>
+          <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px">Abre el archivo Excel del repositorio</div>
+          <div style="font-size:12px;color:var(--muted)">Busca el archivo <strong style="color:var(--text)">CONSULTA_POLIZAS.xlsx</strong> en la lista de archivos y haz clic sobre él.</div>
+        </div>
       </div>
-      <div class="github-field">
-        <label>Rama (branch)</label>
-        <input type="text" id="ghBranch" placeholder="main" autocomplete="off" spellcheck="false">
+      <div style="display:flex;gap:12px;align-items:flex-start;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+        <span style="font-size:18px;min-width:28px">3️⃣</span>
+        <div>
+          <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px">Reemplaza el archivo</div>
+          <div style="font-size:12px;color:var(--muted)">Haz clic en el ícono de <strong style="color:var(--text)">lápiz ✏️</strong> o en los <strong style="color:var(--text)">tres puntos ···</strong> → <em>Upload file</em>. Sube tu nuevo Excel con el mismo nombre <strong style="color:var(--text)">CONSULTA_POLIZAS.xlsx</strong> y confirma los cambios.</div>
+        </div>
       </div>
-      <div class="github-field">
-        <label>Ruta del archivo Excel en el repo</label>
-        <input type="text" id="ghPath" placeholder="Ej. CONSULTA_POLIZAS.xlsx" autocomplete="off" spellcheck="false">
+      <div style="display:flex;gap:12px;align-items:flex-start;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+        <span style="font-size:18px;min-width:28px">4️⃣</span>
+        <div>
+          <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px">¡Listo!</div>
+          <div style="font-size:12px;color:var(--muted)">Los usuarios recibirán los datos actualizados la próxima vez que inicien sesión, o al hacer clic en <strong style="color:var(--text)">🔄 Verificar actualización</strong>.</div>
+        </div>
       </div>
     </div>
-    <div class="github-config-actions">
-      <button class="btn-save-config" onclick="guardarConfigGitHub()">💾 Guardar configuración</button>
-      <button class="btn-sync" onclick="sincronizarDesdeGitHub(true)" id="btnTestSync">🔗 Probar conexión</button>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <a href="https://github.com/Mutuclub/consulta_polizas" target="_blank" style="display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;border-radius:8px;padding:9px 16px;color:#fff;font-family:'Syne',sans-serif;font-size:13px;font-weight:700;text-decoration:none;cursor:pointer">
+        🔗 Ir al repositorio en GitHub
+      </a>
+      <button class="btn-sync" onclick="sincronizarDesdeGitHub(true)" id="btnTestSync">🔄 Verificar conexión</button>
       <span class="github-status" id="githubStatus"></span>
     </div>
   </div>
@@ -1872,8 +1886,6 @@ async function doLogin() {
     document.getElementById('mainSearchContent').style.display = '';
     // Sync USERS from managed storage
     syncUsersLookup();
-    // Cargar campos de configuración guardados
-    cargarConfigGitHub();
   } else {
     adminNav.classList.remove('visible');
   }
@@ -2420,10 +2432,7 @@ function cargarExcel(input) {
         document.getElementById('result').classList.remove('visible');
         document.getElementById('notFound').classList.remove('visible');
 
-        showToast('✅ ' + count.toLocaleString('es-MX') + ' pólizas cargadas correctamente');
-
-        // Subir automáticamente a GitHub para sincronizar con todos los usuarios
-        subirExcelAGitHub(e.target.result, file.name);
+        showToast('✅ ' + count.toLocaleString('es-MX') + ' pólizas cargadas correctamente. Recuerda subir el archivo a GitHub para sincronizar con todos los usuarios.');
       } catch(err) {
         document.getElementById('uploadOverlay').classList.remove('active');
         input.value = '';
@@ -3007,106 +3016,12 @@ function renderBitacora() {
   `).join('');
 }
 
-// ── Subida automática a GitHub ────────────────────────────────────────────────
-const GH_TOKEN  = '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';
+// ── GitHub Sync ───────────────────────────────────────────────────────────────
 const GH_OWNER  = 'Mutuclub';
 const GH_REPO   = 'consulta_polizas';
 const GH_BRANCH = 'main';
 const GH_FILE   = 'CONSULTA_POLIZAS.xlsx';
-
-async function subirExcelAGitHub(arrayBuffer, nombreArchivo) {
-  try {
-    // Convertir ArrayBuffer a Base64 de forma segura (en chunks para archivos grandes)
-    const bytes = new Uint8Array(arrayBuffer);
-    const chunkSize = 8192;
-    let binary = '';
-    for (let i = 0; i < bytes.length; i += chunkSize) {
-      binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
-    }
-    const base64 = btoa(binary);
-
-    const apiUrl = `https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/contents/${GH_FILE}`;
-    const headers = {
-      'Authorization': `Bearer ${GH_TOKEN}`,
-      'Accept': 'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28',
-      'Content-Type': 'application/json'
-    };
-
-    // Obtener el SHA actual del archivo (necesario para actualizarlo)
-    let sha = null;
-    try {
-      const getRes = await fetch(apiUrl, { method: 'GET', headers, mode: 'cors' });
-      if (getRes.ok) {
-        const data = await getRes.json();
-        sha = data.sha;
-      }
-    } catch(e) { /* archivo nuevo, sin SHA */ }
-
-    // Subir el archivo
-    const body = {
-      message: `Actualización de pólizas: ${new Date().toLocaleString('es-MX')}`,
-      content: base64,
-      branch: GH_BRANCH
-    };
-    if (sha) body.sha = sha;
-
-    const putRes = await fetch(apiUrl, {
-      method: 'PUT',
-      headers,
-      mode: 'cors',
-      body: JSON.stringify(body)
-    });
-
-    if (!putRes.ok) {
-      const err = await putRes.json();
-      console.warn('Error al subir a GitHub:', err.message);
-      showToast('⚠️ Datos cargados localmente, pero no se pudo sincronizar con GitHub');
-      return;
-    }
-
-    showToast('☁️ Base de datos sincronizada con GitHub');
-  } catch(err) {
-    console.warn('Error al sincronizar con GitHub:', err);
-    showToast('⚠️ Datos cargados localmente, error al sincronizar con GitHub');
-  }
-}
-
-// ── GitHub Sync ───────────────────────────────────────────────────────────────
-const LS_GH_CONFIG = 'artsNova_gh_config';
 const LS_GH_SHA    = 'artsNova_gh_last_sha';
-
-function getConfigGitHub() {
-  try {
-    const raw = localStorage.getItem(LS_GH_CONFIG);
-    return raw ? JSON.parse(raw) : null;
-  } catch(e) { return null; }
-}
-
-function cargarConfigGitHub() {
-  const cfg = getConfigGitHub();
-  if (!cfg) return;
-  document.getElementById('ghOwner').value  = cfg.owner  || '';
-  document.getElementById('ghRepo').value   = cfg.repo   || '';
-  document.getElementById('ghBranch').value = cfg.branch || 'main';
-  document.getElementById('ghPath').value   = cfg.path   || '';
-}
-
-function guardarConfigGitHub() {
-  const owner  = document.getElementById('ghOwner').value.trim();
-  const repo   = document.getElementById('ghRepo').value.trim();
-  const branch = document.getElementById('ghBranch').value.trim() || 'main';
-  const path   = document.getElementById('ghPath').value.trim();
-  if (!owner || !repo || !path) {
-    setGithubStatus('err', '⚠️ Completa todos los campos');
-    return;
-  }
-  // Resetear SHA guardado para forzar descarga con la nueva config
-  localStorage.removeItem(LS_GH_SHA);
-  localStorage.setItem(LS_GH_CONFIG, JSON.stringify({ owner, repo, branch, path }));
-  setGithubStatus('ok', '✅ Configuración guardada');
-  setTimeout(() => setGithubStatus('', ''), 3000);
-}
 
 function setGithubStatus(type, msg) {
   const el = document.getElementById('githubStatus');
