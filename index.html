@@ -389,6 +389,77 @@
     font-style: italic;
   }
 
+  /* Pagos del cliente */
+  .pagos-resumen {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 14px;
+  }
+  .pago-stat {
+    flex: 1 1 120px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .pago-stat-label {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .pago-stat-value {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .pago-stat-value.saldo-pend { color: var(--orange); }
+  .pago-stat-value.saldo-ok   { color: var(--green); }
+
+  .pagos-tabla-wrap {
+    margin-top: 14px;
+    overflow-x: auto;
+  }
+  .pagos-tabla {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .pagos-tabla th,
+  .pagos-tabla td {
+    text-align: left;
+    padding: 9px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .pagos-tabla th {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .pagos-tabla tbody tr:last-child td { border-bottom: none; }
+  .pagos-tabla .pago-monto {
+    text-align: right;
+    font-weight: 600;
+    color: var(--green);
+    white-space: nowrap;
+  }
+  .pagos-tabla th:last-child { text-align: right; }
+  .pagos-empty {
+    margin-top: 12px;
+    background: var(--surface2);
+    border-radius: 8px;
+    padding: 14px;
+    font-size: 13px;
+    color: var(--muted);
+    text-align: center;
+  }
+
   /* Footer */
   footer {
     text-align: center;
@@ -1818,6 +1889,27 @@
         </div>
       </div>
 
+      <!-- Pagos del Cliente -->
+      <div class="card section-full" id="pagosCard">
+        <div class="card-title">💵 Pagos del Cliente</div>
+        <div class="field-grid">
+          <div class="field">
+            <span class="field-label">Costo</span>
+            <span class="field-value" id="fCosto"></span>
+          </div>
+          <div class="field">
+            <span class="field-label">Pago Inicial</span>
+            <span class="field-value" id="fPagoInicial"></span>
+          </div>
+          <div class="field">
+            <span class="field-label">Pago Mensual</span>
+            <span class="field-value" id="fPagoMensual"></span>
+          </div>
+        </div>
+        <div class="pagos-resumen" id="pagosResumen"></div>
+        <div class="pagos-tabla-wrap" id="pagosTablaWrap"></div>
+      </div>
+
       <!-- Notas -->
       <div class="card section-full" id="notasCard">
         <div class="card-title">📝 Notas</div>
@@ -2329,6 +2421,58 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 3500);
 }
 
+// ── Helpers de Pagos ─────────────────────────────────────
+function escapeHtml(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function parseMoney(v){
+  if (v === null || v === undefined || v === '') return null;
+  if (typeof v === 'number') return isNaN(v) ? null : v;
+  const s = String(v).replace(/[^0-9.\-]/g, '');
+  if (s === '' || s === '-' || s === '.') return null;
+  const n = parseFloat(s);
+  return isNaN(n) ? null : n;
+}
+function fmtMoney(v){
+  const n = (typeof v === 'number') ? v : parseMoney(v);
+  if (n === null) return '—';
+  return n.toLocaleString('es-MX', { style:'currency', currency:'MXN' });
+}
+function fmtFechaPago(v){
+  if (!v) return '';
+  if (v instanceof Date){
+    const d = String(v.getDate()).padStart(2,'0');
+    const m = String(v.getMonth()+1).padStart(2,'0');
+    return d+'/'+m+'/'+v.getFullYear();
+  }
+  return String(v).trim();
+}
+// Lee la hoja PAGOS y arma un índice { IDPOLIZA: [ {recibo, fecha, monto}, ... ] }
+function buildPagosIndex(wb){
+  const idx = {};
+  const name = wb.SheetNames.find(n => n.toUpperCase().trim() === 'PAGOS')
+            || wb.SheetNames.find(n => n.toUpperCase().includes('PAGO'));
+  if (!name) return idx;
+  const ws = wb.Sheets[name];
+  const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+  for (const row of rows){
+    const r = {};
+    for (const k in row) r[k.trim().toUpperCase()] = row[k];
+    const id = String(r['IDPOLIZA'] || '').trim().toUpperCase();
+    if (!id || id.startsWith('=')) continue;
+    const fechaRaw = r['FECHA'] instanceof Date ? r['FECHA'].getTime() : null;
+    const recibo = (() => { const s = String(r['RECIBO'] == null ? '' : r['RECIBO']).trim(); return s === 'undefined' ? '' : s; })();
+    if (!idx[id]) idx[id] = [];
+    idx[id].push({ recibo, fecha: fmtFechaPago(r['FECHA']), monto: parseMoney(r['MONTO']), _f: fechaRaw });
+  }
+  for (const id in idx){
+    idx[id].sort((a,b) => (a._f != null && b._f != null) ? a._f - b._f : 0);
+  }
+  return idx;
+}
+
 function cargarExcel(input) {
   const file = input.files[0];
   if (!file) return;
@@ -2345,6 +2489,7 @@ function cargarExcel(input) {
         const sheetName = wb.SheetNames.find(n => n.toUpperCase().includes('DATO')) || wb.SheetNames[0];
         const ws = wb.Sheets[sheetName];
         const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+        const pagosIdx = buildPagosIndex(wb);
 
         const newDB = {};
         for (const row of rows) {
@@ -2407,6 +2552,10 @@ function cargarExcel(input) {
             COBRADOR: c(r['COBRADOR']),
             'NOTAS ESTATUS': c(r['NOTAS ESTATUS']),
             NOTAS: (() => { const n = c(r['NOTAS']); return n === '00/01/1900' ? '' : n; })(),
+            COSTO: r['COSTO'],
+            'PAGO INICIAL': r['PAGO INICIAL'],
+            'PAGO MENSUAL': r['PAGO MENSUAL'],
+            PAGOS: pagosIdx[poliza] || [],
           };
         }
 
@@ -2806,6 +2955,50 @@ function copiarPoliza() {
   });
 }
 
+function renderPagos(p){
+  const card = document.getElementById('pagosCard');
+  if (!card) return;
+
+  const costo   = parseMoney(p.COSTO);
+  const inicial = parseMoney(p['PAGO INICIAL']);
+  const mensual = parseMoney(p['PAGO MENSUAL']);
+  document.getElementById('fCosto').textContent       = fmtMoney(costo);
+  document.getElementById('fPagoInicial').textContent = fmtMoney(inicial);
+  document.getElementById('fPagoMensual').textContent = fmtMoney(mensual);
+
+  const pagos = Array.isArray(p.PAGOS) ? p.PAGOS : [];
+  const totalPagado = pagos.reduce((s, x) => s + (parseMoney(x.monto) || 0), 0);
+
+  let resumen = '';
+  resumen += `<div class="pago-stat"><span class="pago-stat-label">Pagos registrados</span><span class="pago-stat-value">${pagos.length}</span></div>`;
+  resumen += `<div class="pago-stat"><span class="pago-stat-label">Total pagado</span><span class="pago-stat-value">${fmtMoney(totalPagado)}</span></div>`;
+  if (costo !== null){
+    const saldo = costo - totalPagado;
+    const cls = saldo > 0.0001 ? 'saldo-pend' : 'saldo-ok';
+    resumen += `<div class="pago-stat"><span class="pago-stat-label">Saldo</span><span class="pago-stat-value ${cls}">${fmtMoney(saldo)}</span></div>`;
+  }
+  document.getElementById('pagosResumen').innerHTML = resumen;
+
+  const wrap = document.getElementById('pagosTablaWrap');
+  if (pagos.length === 0){
+    wrap.innerHTML = '<div class="pagos-empty">Sin pagos registrados para esta póliza.</div>';
+  } else {
+    let filas = '';
+    pagos.forEach((pg, i) => {
+      filas += `<tr>
+        <td>${i + 1}</td>
+        <td>${escapeHtml(pg.recibo || '—')}</td>
+        <td>${escapeHtml(pg.fecha || '—')}</td>
+        <td class="pago-monto">${fmtMoney(parseMoney(pg.monto))}</td>
+      </tr>`;
+    });
+    wrap.innerHTML = `<table class="pagos-tabla">
+      <thead><tr><th>#</th><th>Recibo</th><th>Fecha</th><th>Monto</th></tr></thead>
+      <tbody>${filas}</tbody>
+    </table>`;
+  }
+}
+
 function mostrarPoliza(p) {
   _currentPoliza = p;
   const res = document.getElementById('result');
@@ -2834,6 +3027,8 @@ function mostrarPoliza(p) {
   setField('fMotor', p.MOTOR);
   setField('fPlacas', p.PLACAS);
   setField('fSerie', p.SERIE);
+
+  renderPagos(p);
 
   const notasCard = document.getElementById('notasCard');
   const notas = p.NOTAS || '';
@@ -3093,6 +3288,7 @@ async function sincronizarDesdeGitHub(manual = false) {
           const sheetName = wb.SheetNames.find(n => n.toUpperCase().includes('DATO')) || wb.SheetNames[0];
           const ws   = wb.Sheets[sheetName];
           const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+          const pagosIdx = buildPagosIndex(wb);
 
           const newDB = {};
           for (const row of rows) {
@@ -3146,6 +3342,10 @@ async function sincronizarDesdeGitHub(manual = false) {
               COBRADOR: c(r['COBRADOR']),
               'NOTAS ESTATUS': c(r['NOTAS ESTATUS']),
               NOTAS: (() => { const n = c(r['NOTAS']); return n === '00/01/1900' ? '' : n; })(),
+              COSTO: r['COSTO'],
+              'PAGO INICIAL': r['PAGO INICIAL'],
+              'PAGO MENSUAL': r['PAGO MENSUAL'],
+              PAGOS: pagosIdx[poliza] || [],
             };
           }
 
