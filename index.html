@@ -2973,7 +2973,7 @@ function renderPagos(p){
   resumen += `<div class="pago-stat"><span class="pago-stat-label">Pagos registrados</span><span class="pago-stat-value">${pagos.length}</span></div>`;
   resumen += `<div class="pago-stat"><span class="pago-stat-label">Total pagado</span><span class="pago-stat-value">${fmtMoney(totalPagado)}</span></div>`;
   if (costo !== null){
-    const saldo = costo - totalPagado;
+    const saldo = costo - (inicial || 0) - totalPagado;
     const cls = saldo > 0.0001 ? 'saldo-pend' : 'saldo-ok';
     resumen += `<div class="pago-stat"><span class="pago-stat-label">Saldo</span><span class="pago-stat-value ${cls}">${fmtMoney(saldo)}</span></div>`;
   }
