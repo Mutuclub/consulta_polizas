@@ -2967,29 +2967,37 @@ function renderPagos(p){
   document.getElementById('fPagoMensual').textContent = fmtMoney(mensual);
 
   const pagos = Array.isArray(p.PAGOS) ? p.PAGOS : [];
-  const totalPagado = pagos.reduce((s, x) => s + (parseMoney(x.monto) || 0), 0);
+
+  // El pago inicial se trata como el primer pago (Pago 1)
+  const lista = [];
+  if (inicial !== null){
+    lista.push({ recibo: 'INICIAL', fecha: p['INICIO VIGENCIA'] || '', monto: inicial });
+  }
+  pagos.forEach(x => lista.push({ recibo: x.recibo, fecha: x.fecha, monto: parseMoney(x.monto) }));
+
+  const totalPagado = lista.reduce((s, x) => s + (x.monto || 0), 0);
 
   let resumen = '';
-  resumen += `<div class="pago-stat"><span class="pago-stat-label">Pagos registrados</span><span class="pago-stat-value">${pagos.length}</span></div>`;
+  resumen += `<div class="pago-stat"><span class="pago-stat-label">Pagos registrados</span><span class="pago-stat-value">${lista.length}</span></div>`;
   resumen += `<div class="pago-stat"><span class="pago-stat-label">Total pagado</span><span class="pago-stat-value">${fmtMoney(totalPagado)}</span></div>`;
   if (costo !== null){
-    const saldo = costo - (inicial || 0) - totalPagado;
+    const saldo = costo - totalPagado;
     const cls = saldo > 0.0001 ? 'saldo-pend' : 'saldo-ok';
     resumen += `<div class="pago-stat"><span class="pago-stat-label">Saldo</span><span class="pago-stat-value ${cls}">${fmtMoney(saldo)}</span></div>`;
   }
   document.getElementById('pagosResumen').innerHTML = resumen;
 
   const wrap = document.getElementById('pagosTablaWrap');
-  if (pagos.length === 0){
+  if (lista.length === 0){
     wrap.innerHTML = '<div class="pagos-empty">Sin pagos registrados para esta póliza.</div>';
   } else {
     let filas = '';
-    pagos.forEach((pg, i) => {
+    lista.forEach((pg, i) => {
       filas += `<tr>
         <td>${i + 1}</td>
         <td>${escapeHtml(pg.recibo || '—')}</td>
         <td>${escapeHtml(pg.fecha || '—')}</td>
-        <td class="pago-monto">${fmtMoney(parseMoney(pg.monto))}</td>
+        <td class="pago-monto">${fmtMoney(pg.monto)}</td>
       </tr>`;
     });
     wrap.innerHTML = `<table class="pagos-tabla">
