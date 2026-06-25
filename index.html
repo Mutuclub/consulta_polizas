@@ -2020,28 +2020,48 @@ function switchAdminTab(tab) {
 // ── User Management Storage ───────────────────────────────
 const LS_USERS_KEY = 'artsNova_usuarios';
 
+// ── Usuarios permanentes (definidos en código) ────────────
+// Para fijar un usuario en TODOS los dispositivos, agrega su línea aquí.
+// Usa el botón 📋 de la lista de usuarios para generar la línea con el hash correcto.
+const SEED_USERS = [
+  { username: 'CARLOS',   role: 'user',  hash: '081385366665ee4c5ae1ed4532fb896bc741a52ee944fd7a85dc2d87d44bdd6b', created: '01/01/2025' },
+  { username: 'HECTOR',   role: 'user',  hash: '9a83962ee2ec6cdebac42e244bbf4cabc35256bb6ede58b85e1045ecf7b9e534', created: '01/01/2025' },
+  { username: 'RENATO',   role: 'user',  hash: '6ecff7e22b67108901607f5821f757fbc98a1203fd027892ea369e7a0775f2b8', created: '01/01/2025' },
+  { username: 'RICARDO',  role: 'user',  hash: '4484c459c22e0db33de9f8c715c0ad778c80d8f9e9721af42241b4cd1ce5332e', created: '01/01/2025' },
+  { username: 'SANTIAGO', role: 'user',  hash: '4e1dd22dad4c02e9c97cd71ea837008c6fa8b9af8f6b9625fbbc08ab52be6b34', created: '01/01/2025' },
+  { username: 'ADMIN',    role: 'admin', hash: 'e88efd4be71f54b50f970d5261d83e0501b5997a11798f0685526b825d3ba0ac', created: '01/01/2025' },
+];
+
 function getManagedUsers() {
+  let list;
   try {
     const raw = localStorage.getItem(LS_USERS_KEY);
-    if (!raw) return initDefaultUsers();
-    return JSON.parse(raw);
-  } catch(e) { return initDefaultUsers(); }
+    list = raw ? JSON.parse(raw) : null;
+  } catch(e) { list = null; }
+
+  if (!Array.isArray(list)) {
+    list = SEED_USERS.map(u => ({ ...u }));
+    saveManagedUsers(list);
+    return list;
+  }
+
+  // Reincorporar usuarios permanentes que falten (por nombre), sin duplicar
+  const existentes = new Set(list.map(u => (u.username || '').toUpperCase()));
+  let cambiado = false;
+  for (const s of SEED_USERS) {
+    if (!existentes.has(s.username.toUpperCase())) {
+      list.push({ ...s });
+      cambiado = true;
+    }
+  }
+  if (cambiado) saveManagedUsers(list);
+  return list;
 }
 
 function initDefaultUsers() {
-  // Seed from the hardcoded USERS object
-  const defaults = [];
-  const created = '01/01/2025';
-  const entries = [
-    { username: 'CARLOS',   role: 'user',  hash: '081385366665ee4c5ae1ed4532fb896bc741a52ee944fd7a85dc2d87d44bdd6b', created },
-    { username: 'HECTOR',   role: 'user',  hash: '9a83962ee2ec6cdebac42e244bbf4cabc35256bb6ede58b85e1045ecf7b9e534', created },
-    { username: 'RENATO',   role: 'user',  hash: '6ecff7e22b67108901607f5821f757fbc98a1203fd027892ea369e7a0775f2b8', created },
-    { username: 'RICARDO',  role: 'user',  hash: '4484c459c22e0db33de9f8c715c0ad778c80d8f9e9721af42241b4cd1ce5332e', created },
-    { username: 'SANTIAGO', role: 'user',  hash: '4e1dd22dad4c02e9c97cd71ea837008c6fa8b9af8f6b9625fbbc08ab52be6b34', created },
-    { username: 'ADMIN',    role: 'admin', hash: 'e88efd4be71f54b50f970d5261d83e0501b5997a11798f0685526b825d3ba0ac', created },
-  ];
-  saveManagedUsers(entries);
-  return entries;
+  const list = SEED_USERS.map(u => ({ ...u }));
+  saveManagedUsers(list);
+  return list;
 }
 
 function saveManagedUsers(users) {
@@ -2092,12 +2112,34 @@ function renderUsersList() {
         </div>
         <div style="font-size:12px;color:var(--muted)">${u.created || '—'}</div>
         <div class="user-actions">
+          <button class="btn-icon" title="Copiar línea para código (hacer permanente)" onclick="copySeedLine(${idx})">📋</button>
           <button class="btn-icon" title="Editar" onclick="openUserModal('edit', ${idx})">✏️</button>
           ${!isSelf ? `<button class="btn-icon danger" title="Dar de baja" onclick="openConfirmModal(${idx})">🗑️</button>` : ''}
         </div>
       </div>
     `;
   }).join('');
+}
+
+// ── Copiar línea para SEED_USERS (hacer usuario permanente) ──
+function copySeedLine(idx) {
+  const u = getManagedUsers()[idx];
+  if (!u) return;
+  const line = `  { username: '${u.username}', role: '${u.role}', hash: '${u.hash}', created: '${u.created || ''}' },`;
+  const done = () => showToast('📋 Línea copiada. Pégala dentro de SEED_USERS y publica el archivo en GitHub.');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(line).then(done).catch(() => fallbackCopy(line, done));
+  } else {
+    fallbackCopy(line, done);
+  }
+}
+function fallbackCopy(text, cb) {
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.focus(); ta.select();
+  try { document.execCommand('copy'); } catch(e) {}
+  document.body.removeChild(ta);
+  if (cb) cb();
 }
 
 // ── User modal ────────────────────────────────────────────
