@@ -2160,22 +2160,28 @@ async function saveUser() {
       errEl.classList.add('show');
       return;
     }
-    const hash = await sha256(password);
+    const hash = await sha256(username + password);
     const now = new Date();
     const created = `${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}/${now.getFullYear()}`;
     list.push({ username, role, hash, created });
   } else {
     // Actualización
     const existing = list[_editingIdx];
-    if (username !== existing.username && list.some((u, i) => i !== _editingIdx && u.username === username)) {
+    const usernameChanged = username !== existing.username;
+    if (usernameChanged && list.some((u, i) => i !== _editingIdx && u.username === username)) {
       errEl.textContent = 'Ya existe un usuario con ese nombre.';
+      errEl.classList.add('show');
+      return;
+    }
+    if (usernameChanged && !password) {
+      errEl.textContent = 'Al cambiar el nombre de usuario, debes capturar también la contraseña.';
       errEl.classList.add('show');
       return;
     }
     existing.username = username;
     existing.role = role;
     if (password) {
-      existing.hash = await sha256(password);
+      existing.hash = await sha256(username + password);
     }
   }
 
