@@ -3045,7 +3045,9 @@ function renderPagos(p){
   document.getElementById('fPagoInicial').textContent = fmtMoney(inicial);
   document.getElementById('fPagoMensual').textContent = fmtMoney(mensual);
 
-  const pagos = Array.isArray(p.PAGOS) ? p.PAGOS : [];
+  // Se omiten los pagos cuyo monto es 0 (o nulo). No afectan saldo ni total.
+  const pagos = (Array.isArray(p.PAGOS) ? p.PAGOS : [])
+    .filter(x => { const m = parseMoney(x.monto); return m !== null && Math.abs(m) > 0.0001; });
 
   // El pago inicial se trata como el primer pago (Pago 1)
   const lista = [];
@@ -3548,10 +3550,13 @@ function ecCalcular(p){
   let proximo=null;
   if(saldo>0){ const pend=calendario.find(c=>c.estado!=='Pagada'); proximo=pend?pend.vencimiento:null; }
 
-  // Tabla de pagos: inicial primero, luego abonos por fecha
+  // Tabla de pagos: inicial primero, luego abonos por fecha.
+  // Se omiten los abonos con monto 0 (o nulo); no afectan saldo ni total.
   const tabla=[];
   if(inicial>0) tabla.push({recibo:'INICIAL', fecha:ini, monto:inicial, tipo:'Pago Inicial'});
-  const ord = pagos.slice().sort((a,b)=> (a._f||0)-(b._f||0));
+  const ord = pagos.slice()
+    .filter(x=>{ const m=parseMoney(x.monto); return m!==null && Math.abs(m)>0.0001; })
+    .sort((a,b)=> (a._f||0)-(b._f||0));
   ord.forEach(x=> tabla.push({recibo:x.recibo, fecha:ecParseFecha(x.fecha), monto:parseMoney(x.monto)||0, tipo:'Abono'}));
 
   return {costo, inicial, mensual, totalPagado, saldo, estatus, nMensualidades:nCont, calendario, proximo, tabla, ini, fin};
