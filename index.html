@@ -1673,7 +1673,7 @@
         <span style="font-size:18px;min-width:28px">2️⃣</span>
         <div>
           <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:2px">Abre el archivo Excel del repositorio</div>
-          <div style="font-size:12px;color:var(--muted)">Busca el archivo <strong style="color:var(--text)">CONSULTA_POLIZAS.xlsx</strong> en la lista de archivos y haz clic sobre él.</div>
+          <div style="font-size:12px;color:var(--muted)">Busca el archivo <strong style="color:var(--text)">MUTUAL_2026.xlsx</strong> (el mismo de Reportes de Cobranza) en la lista de archivos y haz clic sobre él.</div>
         </div>
       </div>
       <div style="display:flex;gap:12px;align-items:flex-start;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
@@ -2531,6 +2531,101 @@ function buildPagosIndex(wb){
   return idx;
 }
 
+/* ── Adaptador MUTUAL_2026 → formato interno de Consulta de Pólizas ──────────
+   Permite leer directo del libro MUTUAL_2026.xlsx (el mismo de Reportes de
+   Cobranza): Bd Clientes como datos, Bd Pagos + Pagos Historicos fundidas como
+   pagos, enganche aparte (PAGO INICIAL). El ESTATUS/NOTAS ESTATUS se CALCULAN
+   aquí (regla de tiempo validada ~99% vs el archivo preparado a mano). */
+function _mNorm(s){return String(s==null?'':s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,' ').trim();}
+function _mGet(row){var ix={};for(var k in row)ix[_mNorm(k)]=k;return function(name){if(name in row)return row[name];var r=ix[_mNorm(name)];return r!==undefined?row[r]:undefined;};}
+function _mNum(v){var n=parseMoney(v);return n===null?0:n;}
+function _mFecha(v){if(!v)return '';if(v instanceof Date){if(isNaN(v))return '';var d=String(v.getDate()).padStart(2,'0'),m=String(v.getMonth()+1).padStart(2,'0');return d+'/'+m+'/'+v.getFullYear();}return String(v).trim();}
+
+function esFormatoMutual(wb){
+  return wb.SheetNames.some(function(n){ return n.trim().toLowerCase()==='bd clientes'; });
+}
+
+function _mutualEstatus(costo, inicial, mensual, inicioDate, sumaPagos){
+  var saldo = costo - inicial - sumaPagos;
+  if (saldo <= 0.005) return {e:'PAGADA', n:'COMPLETAMENTE PAGADA'};
+  if (!(mensual>0) || !(inicioDate instanceof Date) || isNaN(inicioDate)) return {e:'VIGENTE', n:'AL CORRIENTE DE SUS PAGOS'};
+  var hoy = new Date();
+  var m = (hoy.getFullYear()-inicioDate.getFullYear())*12 + (hoy.getMonth()-inicioDate.getMonth());
+  if (hoy.getDate() < inicioDate.getDate()) m -= 1;
+  if (m<0) m=0;
+  var vN = Math.ceil((m - (sumaPagos/mensual)) - 1e-9);
+  if (vN <= 0) return {e:'VIGENTE', n:'AL CORRIENTE DE SUS PAGOS'};
+  var pesos = function(x){ return '$'+Number(x).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2}); };
+  if (vN === 1) return {e:'ATRASADA', n:'ATRASADA CON '+pesos(mensual)+' / 1 PAGO(S) ATRASADO(S)'};
+  if (vN === 2) return {e:'PROBLEMA', n:'PROBLEMA: '+pesos(2*mensual)+' / 2 PAGO(S) ATRASADO(S)'};
+  var N = Math.round(saldo/mensual);
+  return {e:'CANCELADA POR FALTA DE PAGO', n:'CANCELADA POR FALTA DE PAGO. SALDO DEUDOR PENDIENTE DE PAGO '+pesos(saldo)+' / '+N+' PAGO(S) NO REALIZADO(S)'};
+}
+
+function _mutualPagosIndex(wb){
+  var idx = {};
+  ['Bd Pagos','Pagos Historicos'].forEach(function(nombre){
+    var real = wb.SheetNames.find(function(n){ return n.trim().toLowerCase()===nombre.toLowerCase(); });
+    if(!real) return;
+    var rows = XLSX.utils.sheet_to_json(wb.Sheets[real], {defval:'', raw:true});
+    rows.forEach(function(row){
+      var g=_mGet(row);
+      var id=String(g('IdPoliza')==null?'':g('IdPoliza')).trim().toUpperCase();
+      if(!id) return;
+      var fRaw=g('Fecha Pago');
+      if(!idx[id]) idx[id]=[];
+      idx[id].push({ recibo:String(g('Número de Recibo')==null?'':g('Número de Recibo')).trim(), fecha:_mFecha(fRaw), monto:parseMoney(g('Monto de Pago')), _f:(fRaw instanceof Date)?fRaw.getTime():null });
+    });
+  });
+  for(var id in idx){ idx[id].sort(function(a,b){ return (a._f!=null&&b._f!=null)?a._f-b._f:0; }); }
+  return idx;
+}
+
+function construirDBdesdeMutual(wb){
+  var cliName = wb.SheetNames.find(function(n){ return n.trim().toLowerCase()==='bd clientes'; });
+  var rows = XLSX.utils.sheet_to_json(wb.Sheets[cliName], {defval:'', raw:true});
+  var pagosIdx = _mutualPagosIndex(wb);
+  var newDB = {};
+  rows.forEach(function(row){
+    var g=_mGet(row);
+    var poliza=String(g('IdPoliza')==null?'':g('IdPoliza')).trim().toUpperCase();
+    if(!poliza || poliza.startsWith('=')) return;
+    var costo=_mNum(g('Costo')), inicial=_mNum(g('Pago Inicial')), mensual=_mNum(g('Pagos de'));
+    var pagos = pagosIdx[poliza] || [];
+    var sumaPagos = pagos.reduce(function(s,x){ return s + (parseMoney(x.monto)||0); }, 0);
+    var est = _mutualEstatus(costo, inicial, mensual, g('Fecha Inicio Vigencia'), sumaPagos);
+    var c=function(v){ if(v===null||v===undefined)return ''; if(v instanceof Date)return _mFecha(v); var s=String(v).trim(); return s==='undefined'?'':s; };
+    var modelo=g('Modelo'); modelo=(modelo instanceof Date)?String(modelo.getFullYear()):(parseMoney(modelo)!==null?String(Math.round(parseMoney(modelo))):String(modelo||'').trim());
+    newDB[poliza]={
+      POLIZA:poliza,
+      NOMBRE:c(g('Nombre')),
+      TELEFONO:c(g('Telefono 01')).replace('.0',''),
+      ESTATUS:est.e,
+      COBERTURA:c(g('Tipo Cobertura')),
+      'TIPO DE POLIZA':c(g('Tipo de Póliza')),
+      ASESOR:c(g('Asesor')),
+      MARCA:c(g('Vehículo')),
+      MODELO:modelo,
+      TIPO:c(g('Tipo')),
+      MOTOR:c(g('Motor')),
+      COLOR:c(g('Color')),
+      PLACAS:c(g('Placas')),
+      SERIE:c(g('Número de Serie')),
+      'INICIO VIGENCIA':_mFecha(g('Fecha Inicio Vigencia')),
+      'TERMINO VIGENCIA':_mFecha(g('Fecha Termino Vigencia')),
+      'TIPO COBRO':c(g('Tipo de Cobro')),
+      COBRADOR:c(g('Cobrador')),
+      'NOTAS ESTATUS':est.n,
+      NOTAS:(function(){ var n=c(g('Notas')); return n==='00/01/1900'?'':n; })(),
+      COSTO:costo,
+      'PAGO INICIAL':inicial,
+      'PAGO MENSUAL':mensual,
+      PAGOS:pagos
+    };
+  });
+  return newDB;
+}
+
 function cargarExcel(input) {
   const file = input.files[0];
   if (!file) return;
@@ -2543,13 +2638,15 @@ function cargarExcel(input) {
       try {
         const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
 
+        let newDB;
+        if (esFormatoMutual(wb)) { newDB = construirDBdesdeMutual(wb); } else {
         // Try to find the DATOS sheet
         const sheetName = wb.SheetNames.find(n => n.toUpperCase().includes('DATO')) || wb.SheetNames[0];
         const ws = wb.Sheets[sheetName];
         const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
         const pagosIdx = buildPagosIndex(wb);
 
-        const newDB = {};
+        newDB = {};
         for (const row of rows) {
           // Normalize keys (trim spaces)
           const r = {};
@@ -2615,6 +2712,7 @@ function cargarExcel(input) {
             'PAGO MENSUAL': r['PAGO MENSUAL'],
             PAGOS: pagosIdx[poliza] || [],
           };
+        }
         }
 
         const count = Object.keys(newDB).length;
@@ -3304,7 +3402,7 @@ function renderBitacora() {
 const GH_OWNER  = 'Mutuclub';
 const GH_REPO   = 'consulta_polizas';
 const GH_BRANCH = 'main';
-const GH_FILE   = 'CONSULTA_POLIZAS.xlsx';
+const GH_FILE   = 'MUTUAL_2026.xlsx';
 const LS_GH_SHA    = 'artsNova_gh_last_sha';
 
 function setGithubStatus(type, msg) {
@@ -3374,12 +3472,14 @@ async function sincronizarDesdeGitHub(manual = false) {
       loadSheetJS(() => {
         try {
           const wb = XLSX.read(arrayBuffer, { type: 'array', cellDates: true });
+          let newDB;
+          if (esFormatoMutual(wb)) { newDB = construirDBdesdeMutual(wb); } else {
           const sheetName = wb.SheetNames.find(n => n.toUpperCase().includes('DATO')) || wb.SheetNames[0];
           const ws   = wb.Sheets[sheetName];
           const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
           const pagosIdx = buildPagosIndex(wb);
 
-          const newDB = {};
+          newDB = {};
           for (const row of rows) {
             const r = {};
             for (const k in row) r[k.trim()] = row[k];
@@ -3436,6 +3536,7 @@ async function sincronizarDesdeGitHub(manual = false) {
               'PAGO MENSUAL': r['PAGO MENSUAL'],
               PAGOS: pagosIdx[poliza] || [],
             };
+          }
           }
 
           const count = Object.keys(newDB).length;
