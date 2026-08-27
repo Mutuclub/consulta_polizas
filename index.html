@@ -2564,6 +2564,12 @@ function _mutualEstatus(costo, inicial, mensual, inicioDate, sumaPagos){
 
 function _mutualPagosIndex(wb){
   var idx = {};
+  var vistas = {}; // deduplicación por poliza+recibo o poliza+fecha
+  function clavePago(id, recibo, fecha){
+    var r = String(recibo==null?'':recibo).trim().replace(/^0+/,'') || '';
+    if(r && r!=='0') return id+'|r:'+r;
+    return id+'|f:'+String(fecha==null?'':fecha).trim();
+  }
   ['Bd Pagos','Pagos Historicos'].forEach(function(nombre){
     var real = wb.SheetNames.find(function(n){ return n.trim().toLowerCase()===nombre.toLowerCase(); });
     if(!real) return;
@@ -2573,8 +2579,13 @@ function _mutualPagosIndex(wb){
       var id=String(g('IdPoliza')==null?'':g('IdPoliza')).trim().toUpperCase();
       if(!id) return;
       var fRaw=g('Fecha Pago');
+      var recibo=String(g('Número de Recibo')==null?'':g('Número de Recibo')).trim();
+      var fecha=_mFecha(fRaw);
+      var clave=clavePago(id, recibo, fecha);
+      if(vistas[clave]) return; // duplicado, ignorar
+      vistas[clave]=true;
       if(!idx[id]) idx[id]=[];
-      idx[id].push({ recibo:String(g('Número de Recibo')==null?'':g('Número de Recibo')).trim(), fecha:_mFecha(fRaw), monto:parseMoney(g('Monto de Pago')), _f:(fRaw instanceof Date)?fRaw.getTime():null });
+      idx[id].push({ recibo:recibo, fecha:fecha, monto:parseMoney(g('Monto de Pago')), _f:(fRaw instanceof Date)?fRaw.getTime():null });
     });
   });
   for(var id in idx){ idx[id].sort(function(a,b){ return (a._f!=null&&b._f!=null)?a._f-b._f:0; }); }
