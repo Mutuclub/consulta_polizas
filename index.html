@@ -3165,6 +3165,21 @@ function renderPagos(p){
   }
   pagos.forEach(x => lista.push({ recibo: x.recibo, fecha: x.fecha, monto: parseMoney(x.monto) }));
 
+  // Ordenar cronológicamente: del más antiguo al más reciente
+  function parseFechaDMY(s){
+    if(!s) return null;
+    const pts = String(s).split('/');
+    if(pts.length !== 3) return null;
+    return new Date(parseInt(pts[2]), parseInt(pts[1])-1, parseInt(pts[0]));
+  }
+  lista.sort(function(a, b){
+    const da = parseFechaDMY(a.fecha), db = parseFechaDMY(b.fecha);
+    if(da && db) return da - db;
+    if(da) return -1;
+    if(db) return 1;
+    return 0;
+  });
+
   const totalPagado = lista.reduce((s, x) => s + (x.monto || 0), 0);
 
   let resumen = '';
