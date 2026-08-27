@@ -3163,20 +3163,26 @@ function renderPagos(p){
   if (inicial !== null){
     lista.push({ recibo: 'INICIAL', fecha: p['INICIO VIGENCIA'] || '', monto: inicial });
   }
-  pagos.forEach(x => lista.push({ recibo: x.recibo, fecha: x.fecha, monto: parseMoney(x.monto) }));
+  pagos.forEach(x => lista.push({ recibo: x.recibo, fecha: x.fecha, monto: parseMoney(x.monto), _f: x._f != null ? x._f : null }));
 
-  // Ordenar cronológicamente: del más antiguo al más reciente
-  function parseFechaDMY(s){
+  // Ordenar cronológicamente usando timestamp _f (ms desde epoch) cuando existe,
+  // o parseando DD/MM/YYYY como fallback
+  function parseFechaDMYts(s){
     if(!s) return null;
-    const pts = String(s).split('/');
+    var pts = String(s).split('/');
     if(pts.length !== 3) return null;
-    return new Date(parseInt(pts[2]), parseInt(pts[1])-1, parseInt(pts[0]));
+    var d = new Date(parseInt(pts[2]), parseInt(pts[1])-1, parseInt(pts[0]));
+    return isNaN(d) ? null : d.getTime();
   }
+  // Fecha de inicio de vigencia como referencia para el INICIAL
+  var tsInicial = parseFechaDMYts(p['INICIO VIGENCIA'] || '');
+  lista.forEach(function(item){ if(item.recibo === 'INICIAL' && item._f == null) item._f = tsInicial; });
   lista.sort(function(a, b){
-    const da = parseFechaDMY(a.fecha), db = parseFechaDMY(b.fecha);
-    if(da && db) return da - db;
-    if(da) return -1;
-    if(db) return 1;
+    var ta = (a._f != null) ? a._f : parseFechaDMYts(a.fecha);
+    var tb = (b._f != null) ? b._f : parseFechaDMYts(b.fecha);
+    if(ta != null && tb != null) return ta - tb;
+    if(ta != null) return -1;
+    if(tb != null) return 1;
     return 0;
   });
 
