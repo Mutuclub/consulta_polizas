@@ -2540,6 +2540,19 @@ function _mNorm(s){return String(s==null?'':s).normalize('NFD').replace(/[\u0300
 function _mGet(row){var ix={};for(var k in row)ix[_mNorm(k)]=k;return function(name){if(name in row)return row[name];var r=ix[_mNorm(name)];return r!==undefined?row[r]:undefined;};}
 function _mNum(v){var n=parseMoney(v);return n===null?0:n;}
 function _mFecha(v){if(!v)return '';if(v instanceof Date){if(isNaN(v))return '';var d=String(v.getDate()).padStart(2,'0'),m=String(v.getMonth()+1).padStart(2,'0');return d+'/'+m+'/'+v.getFullYear();}return String(v).trim();}
+// Parseo explícito DD/MM/YYYY → Date (evita ambigüedad de new Date() con strings)
+function _mParseDate(v){
+  if(!v) return null;
+  if(v instanceof Date) return isNaN(v)?null:v;
+  var s=String(v).trim();
+  // Formato DD/MM/YYYY
+  var m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(m){ var d=new Date(parseInt(m[3]),parseInt(m[2])-1,parseInt(m[1])); return isNaN(d)?null:d; }
+  // Formato numérico serial de Excel (p.ej. 45569)
+  var n=parseFloat(s);
+  if(!isNaN(n)&&n>1&&n<100000){ var base=new Date(1900,0,1); base.setDate(base.getDate()+(n-2)); return isNaN(base)?null:base; }
+  return null;
+}
 
 function esFormatoMutual(wb){
   return wb.SheetNames.some(function(n){ return n.trim().toLowerCase()==='bd clientes'; });
@@ -2604,7 +2617,7 @@ function construirDBdesdeMutual(wb){
     var costo=_mNum(g('Costo')), inicial=_mNum(g('Pago Inicial')), mensual=_mNum(g('Pagos de'));
     var pagos = pagosIdx[poliza] || [];
     var sumaPagos = pagos.reduce(function(s,x){ return s + (parseMoney(x.monto)||0); }, 0);
-    var est = _mutualEstatus(costo, inicial, mensual, g('Fecha Inicio Vigencia'), sumaPagos);
+    var est = _mutualEstatus(costo, inicial, mensual, _mParseDate(g('Fecha Inicio Vigencia')), sumaPagos);
     var c=function(v){ if(v===null||v===undefined)return ''; if(v instanceof Date)return _mFecha(v); var s=String(v).trim(); return s==='undefined'?'':s; };
     var modelo=g('Modelo'); modelo=(modelo instanceof Date)?String(modelo.getFullYear()):(parseMoney(modelo)!==null?String(Math.round(parseMoney(modelo))):String(modelo||'').trim());
     newDB[poliza]={
