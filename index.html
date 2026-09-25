@@ -768,6 +768,11 @@
     border: 1px solid var(--border);
   }
   .mode-tab:hover:not(.active) { color: var(--text); }
+  @media (max-width: 520px) {
+    .mode-tabs { width: 100%; gap: 4px; }
+    .mode-tab { flex: 1; padding: 8px 4px; font-size: 12px; white-space: nowrap; }
+  }
+  .tel-match { color: var(--accent); font-weight: 600; }
 
   /* Multi-results */
   .multi-results {
@@ -1726,6 +1731,7 @@
       <button class="mode-tab active" id="tabPoliza" onclick="setMode('poliza')"># Póliza</button>
       <button class="mode-tab" id="tabPlaca" onclick="setMode('placa')">🚗 Placa</button>
       <button class="mode-tab" id="tabNombre" onclick="setMode('nombre')">👤 Nombre</button>
+      <button class="mode-tab" id="tabTelefono" onclick="setMode('telefono')">📞 Teléfono</button>
     </div>
     <span class="search-label" id="searchLabel">Número de Póliza</span>
     <div class="search-row">
@@ -1749,6 +1755,9 @@
       <span class="hint-label">Busca por:</span>
       <span class="chip" onclick="demoNombre('GARCIA')">Apellido parcial</span>
       <span class="chip" onclick="demoNombre('JUAN')">Nombre parcial</span>
+    </div>
+    <div class="hint-row" id="hintRowTelefono" style="display:none">
+      <span class="hint-label">10 dígitos, o al menos 7 para búsqueda parcial. Acepta espacios, guiones y +52.</span>
     </div>
   </div>
 
@@ -2789,8 +2798,64 @@ function buildPlacaIndex(db) {
 }
 let PLACA_IDX = buildPlacaIndex(DB);
 
+// ── Índice de teléfonos ─────────────────────────────────
+// El campo TELEFONO trae texto libre ("3315871188 NW 3323890097 WHATS"),
+// así que extraemos cada número y lo normalizamos a sus últimos 10 dígitos.
+// También se indexan los números que aparezcan en NOTAS (p. ej. "TEL. PERSONAL 33...").
+function normalizarTel(t) {
+  let d = String(t || '').replace(/\D/g, '');
+  if (d.length > 10) d = d.slice(-10);   // quita +52, 52, 1, etc.
+  return d;
+}
+function extraerTelefonos(texto) {
+  // Agrupa dígitos separados por espacio/guion/punto/paréntesis ("33 1234 5678"),
+  // pero corta al llegar a 10 dígitos para separar números pegados ("3338076820 3316989424").
+  const grupos = String(texto || '').match(/\d[\d\s\-().]*\d|\d/g) || [];
+  const out = [];
+  const agregar = buf => {
+    const d = normalizarTel(buf);
+    if (d.length >= 7 && !out.includes(d)) out.push(d);
+  };
+  for (const g of grupos) {
+    let buf = '';
+    for (const tok of g.match(/\d+/g)) {
+      if (buf.length >= 10) { agregar(buf); buf = ''; }
+      buf += tok;
+    }
+    agregar(buf);
+  }
+  return out;
+}
+function buildTelIndex(db) {
+  const lista = [];
+  for (const poliza in db) {
+    const rec = db[poliza];
+    const tels = extraerTelefonos(rec.TELEFONO);
+    const notas = extraerTelefonos(rec.NOTAS).filter(t => !tels.includes(t));
+    if (tels.length || notas.length) lista.push({ rec, tels, notas });
+  }
+  return lista;
+}
+let TEL_IDX = buildTelIndex(DB);
+
+function buscarPorTelefono(q) {
+  const d = normalizarTel(q);
+  if (d.length < 7) return { error: 'Escribe al menos 7 dígitos del teléfono' };
+  const exacto = d.length === 10;
+  const coincide = t => exacto ? t === d : t.includes(d);
+  const out = [];
+  for (const it of TEL_IDX) {
+    const enTel = it.tels.find(coincide);
+    const enNotas = enTel ? null : it.notas.find(coincide);
+    if (enTel || enNotas) out.push({ p: it.rec, tel: enTel || enNotas, fuente: enTel ? 'tel' : 'notas' });
+  }
+  // Primero coincidencias en TELEFONO, luego en NOTAS
+  out.sort((a, b) => (a.fuente === b.fuente ? 0 : a.fuente === 'tel' ? -1 : 1));
+  return { d, matches: out };
+}
+
 // Rebuild index when DB changes
-function rebuildIndex() { PLACA_IDX = buildPlacaIndex(DB); }
+function rebuildIndex() { PLACA_IDX = buildPlacaIndex(DB); TEL_IDX = buildTelIndex(DB); }
 
 function setMode(mode) {
   searchMode = mode;
@@ -2802,13 +2867,18 @@ function setMode(mode) {
   const hintP = document.getElementById('hintRow');
   const hintPl = document.getElementById('hintRowPlaca');
   const hintN = document.getElementById('hintRowNombre');
+  const tabT = document.getElementById('tabTelefono');
+  const hintT = document.getElementById('hintRowTelefono');
 
   tabP.classList.remove('active');
   tabPl.classList.remove('active');
   tabN.classList.remove('active');
+  tabT.classList.remove('active');
   hintP.style.display = 'none';
   hintPl.style.display = 'none';
   hintN.style.display = 'none';
+  hintT.style.display = 'none';
+  input.inputMode = 'text';
 
   if (mode === 'poliza') {
     tabP.classList.add('active');
@@ -2822,6 +2892,13 @@ function setMode(mode) {
     input.placeholder = 'Ej. JSR6621, JAF2785...';
     input.style.textTransform = 'uppercase';
     hintPl.style.display = '';
+  } else if (mode === 'telefono') {
+    tabT.classList.add('active');
+    label.textContent = 'Teléfono del Cliente';
+    input.placeholder = 'Ej. 33 1234 5678';
+    input.style.textTransform = 'none';
+    input.inputMode = 'tel';
+    hintT.style.display = '';
   } else {
     tabN.classList.add('active');
     label.textContent = 'Nombre del Asegurado';
@@ -3003,6 +3080,44 @@ function buscar() {
           <div class="multi-item-poliza">${p.POLIZA}</div>
           <div class="multi-item-nombre">${p.NOMBRE || 'Sin nombre'}</div>
           <div class="multi-item-meta">${p.MARCA || ''} ${p.MODELO || ''} · ${p['INICIO VIGENCIA'] || ''} – ${p['TERMINO VIGENCIA'] || ''}</div>
+        </div>
+        <div class="multi-item-estatus ${cls}">${p.ESTATUS}</div>
+        <div class="multi-item-arrow">›</div>`;
+      div.onclick = () => mostrarPoliza(p);
+      list.appendChild(div);
+    });
+    _lastMultiResults = { title: document.getElementById('multiTitle').textContent, badge: document.getElementById('multiBadge').textContent, html: list.innerHTML };
+    multi.style.display = 'block';
+    multi.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+
+  // ── Teléfono search ───────────────────────────────────
+  if (searchMode === 'telefono') {
+    const r = buscarPorTelefono(q);
+    if (r.error || r.matches.length === 0) {
+      document.getElementById('nfTitle').textContent = r.error || 'Teléfono no encontrado';
+      nf.classList.add('visible');
+      return;
+    }
+    if (r.matches.length === 1) {
+      mostrarPoliza(r.matches[0].p);
+      return;
+    }
+    document.getElementById('multiTitle').textContent = 'Pólizas con teléfono ' + r.d;
+    document.getElementById('multiBadge').textContent = r.matches.length + ' resultados';
+    const list = document.getElementById('multiList');
+    list.innerHTML = '';
+    r.matches.forEach(({ p, tel, fuente }) => {
+      const cls = statusClass(p.ESTATUS);
+      const div = document.createElement('div');
+      div.className = 'multi-item';
+      div.innerHTML = `
+        <div class="multi-item-dot dot-${cls}"></div>
+        <div class="multi-item-info">
+          <div class="multi-item-poliza">${p.POLIZA}</div>
+          <div class="multi-item-nombre">${p.NOMBRE || 'Sin nombre'}</div>
+          <div class="multi-item-meta"><span class="tel-match">📞 ${tel}${fuente === 'notas' ? ' (en notas)' : ''}</span> · ${p.MARCA || ''} ${p.MODELO || ''} · ${p['INICIO VIGENCIA'] || ''} – ${p['TERMINO VIGENCIA'] || ''}</div>
         </div>
         <div class="multi-item-estatus ${cls}">${p.ESTATUS}</div>
         <div class="multi-item-arrow">›</div>`;
