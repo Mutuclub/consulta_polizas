@@ -119,6 +119,7 @@
   }
   .search-input {
     flex: 1;
+    min-width: 0;
     background: var(--bg);
     border: 1.5px solid var(--border);
     border-radius: 10px;
@@ -749,6 +750,8 @@
     border-radius: 10px;
     padding: 4px;
     width: fit-content;
+    max-width: 100%;
+    flex-wrap: wrap;
   }
   .mode-tab {
     background: none;
@@ -768,11 +771,22 @@
     border: 1px solid var(--border);
   }
   .mode-tab:hover:not(.active) { color: var(--text); }
-  @media (max-width: 520px) {
-    .mode-tabs { width: 100%; gap: 4px; }
-    .mode-tab { flex: 1; padding: 8px 4px; font-size: 12px; white-space: nowrap; }
+  @media (max-width: 600px) { .mode-tab { padding: 7px 11px; font-size: 12px; } .btn-search { padding: 14px 16px; } .search-input { padding: 14px 12px; } }
+  .match-tag {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    vertical-align: middle;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--muted);
   }
-  .tel-match { color: var(--accent); font-weight: 600; }
+  .match-tag.exacta { color: var(--accent); border-color: var(--accent); }
+  .multi-more { padding: 10px 16px; font-size: 12px; color: var(--muted); text-align: center; }
 
   /* Multi-results */
   .multi-results {
@@ -1514,7 +1528,7 @@
       <span>SISTEMA DE PÓLIZAS</span>
     </div>
     <h1>Consulta de<br>Pólizas</h1>
-    <p class="subtitle">Ingresa el número de póliza para ver todos los detalles</p>
+    <p class="subtitle">Busca por póliza, placas, número de serie o nombre</p>
   </header>
 
   
@@ -1728,17 +1742,26 @@
 
 <div class="search-card">
     <div class="mode-tabs">
-      <button class="mode-tab active" id="tabPoliza" onclick="setMode('poliza')"># Póliza</button>
+      <button class="mode-tab active" id="tabTodos" onclick="setMode('todos')">🔎 Todos</button>
+      <button class="mode-tab" id="tabPoliza" onclick="setMode('poliza')"># Póliza</button>
       <button class="mode-tab" id="tabPlaca" onclick="setMode('placa')">🚗 Placa</button>
+      <button class="mode-tab" id="tabSerie" onclick="setMode('serie')">🔢 Serie</button>
       <button class="mode-tab" id="tabNombre" onclick="setMode('nombre')">👤 Nombre</button>
-      <button class="mode-tab" id="tabTelefono" onclick="setMode('telefono')">📞 Teléfono</button>
     </div>
-    <span class="search-label" id="searchLabel">Número de Póliza</span>
+    <span class="search-label" id="searchLabel">Póliza, placas, número de serie o nombre</span>
     <div class="search-row">
-      <input type="text" class="search-input" id="polizaInput" placeholder="Ej. 0002J, 1234J..." autocomplete="off" autocorrect="off" spellcheck="false">
+      <input type="text" class="search-input" id="polizaInput" placeholder="Escribe cualquier dato..." autocomplete="off" autocorrect="off" spellcheck="false" style="text-transform:uppercase">
       <button class="btn-search" onclick="buscar()">Buscar</button>
     </div>
-    <div class="hint-row" id="hintRow">
+    <div class="hint-row" id="hintRowTodos">
+      <span class="hint-label">Busca en todos los campos a la vez. Para la serie bastan los últimos 6 caracteres.</span>
+    </div>
+    <div class="hint-row" id="hintRowSerie" style="display:none">
+      <span class="hint-label">Serie completa o los últimos 5+ caracteres:</span>
+      <span class="chip" onclick="demoSerie('MD6M14PA9P4AD2752')">MD6M14PA9P4AD2752</span>
+      <span class="chip" onclick="demoSerie('AD2752')">AD2752</span>
+    </div>
+    <div class="hint-row" id="hintRow" style="display:none">
       <span class="hint-label">Ejemplos póliza:</span>
       <span class="chip" onclick="demo('0002J')">0002J</span>
       <span class="chip" onclick="demo('0005J')">0005J</span>
@@ -1756,15 +1779,12 @@
       <span class="chip" onclick="demoNombre('GARCIA')">Apellido parcial</span>
       <span class="chip" onclick="demoNombre('JUAN')">Nombre parcial</span>
     </div>
-    <div class="hint-row" id="hintRowTelefono" style="display:none">
-      <span class="hint-label">10 dígitos, o al menos 7 para búsqueda parcial. Acepta espacios, guiones y +52.</span>
-    </div>
   </div>
 
   <div class="not-found" id="notFound">
     <div class="nf-icon">🔍</div>
     <h3 id="nfTitle">Póliza no encontrada</h3>
-    <p>Verifica el número e intenta de nuevo</p>
+    <p id="nfMsg">Verifica el dato e intenta de nuevo</p>
   </div>
 
   <!-- Multiple results (placa search) -->
@@ -2549,19 +2569,6 @@ function _mNorm(s){return String(s==null?'':s).normalize('NFD').replace(/[\u0300
 function _mGet(row){var ix={};for(var k in row)ix[_mNorm(k)]=k;return function(name){if(name in row)return row[name];var r=ix[_mNorm(name)];return r!==undefined?row[r]:undefined;};}
 function _mNum(v){var n=parseMoney(v);return n===null?0:n;}
 function _mFecha(v){if(!v)return '';if(v instanceof Date){if(isNaN(v))return '';var d=String(v.getDate()).padStart(2,'0'),m=String(v.getMonth()+1).padStart(2,'0');return d+'/'+m+'/'+v.getFullYear();}return String(v).trim();}
-// Parseo explícito DD/MM/YYYY → Date (evita ambigüedad de new Date() con strings)
-function _mParseDate(v){
-  if(!v) return null;
-  if(v instanceof Date) return isNaN(v)?null:v;
-  var s=String(v).trim();
-  // Formato DD/MM/YYYY
-  var m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if(m){ var d=new Date(parseInt(m[3]),parseInt(m[2])-1,parseInt(m[1])); return isNaN(d)?null:d; }
-  // Formato numérico serial de Excel (p.ej. 45569)
-  var n=parseFloat(s);
-  if(!isNaN(n)&&n>1&&n<100000){ var base=new Date(1900,0,1); base.setDate(base.getDate()+(n-2)); return isNaN(base)?null:base; }
-  return null;
-}
 
 function esFormatoMutual(wb){
   return wb.SheetNames.some(function(n){ return n.trim().toLowerCase()==='bd clientes'; });
@@ -2626,7 +2633,7 @@ function construirDBdesdeMutual(wb){
     var costo=_mNum(g('Costo')), inicial=_mNum(g('Pago Inicial')), mensual=_mNum(g('Pagos de'));
     var pagos = pagosIdx[poliza] || [];
     var sumaPagos = pagos.reduce(function(s,x){ return s + (parseMoney(x.monto)||0); }, 0);
-    var est = _mutualEstatus(costo, inicial, mensual, _mParseDate(g('Fecha Inicio Vigencia')), sumaPagos);
+    var est = _mutualEstatus(costo, inicial, mensual, g('Fecha Inicio Vigencia'), sumaPagos);
     var c=function(v){ if(v===null||v===undefined)return ''; if(v instanceof Date)return _mFecha(v); var s=String(v).trim(); return s==='undefined'?'':s; };
     var modelo=g('Modelo'); modelo=(modelo instanceof Date)?String(modelo.getFullYear()):(parseMoney(modelo)!==null?String(Math.round(parseMoney(modelo))):String(modelo||'').trim());
     newDB[poliza]={
@@ -2782,130 +2789,68 @@ function cargarExcel(input) {
 }
 
 // ── Search mode ──────────────────────────────────────────
-let searchMode = 'poliza'; // 'poliza' | 'placa'
+let searchMode = 'todos'; // 'todos' | 'poliza' | 'placa' | 'serie' | 'nombre'
+const MIN_PARCIAL = 5;    // caracteres mínimos para búsqueda parcial de serie/placa
 
-// Build placa index after DB load
-function buildPlacaIndex(db) {
+// Normaliza para comparar: mayúsculas, solo letras y números (quita espacios, guiones, puntos)
+function normBusq(v) {
+  return String(v == null ? '' : v).toUpperCase().replace(/[^A-Z0-9Ñ]/g, '');
+}
+function datoValido(raw, norm) {
+  const t = String(raw || '').trim().toUpperCase();
+  return norm && t !== 'SIN DATO' && !t.includes('/'); // descarta basura tipo 00/01/1900
+}
+
+// Índices exactos por placa y por serie (llave normalizada → lista de pólizas)
+function buildCampoIndex(db, campo) {
   const idx = {};
   for (const poliza in db) {
     const rec = db[poliza];
-    const placa = (rec.PLACAS || '').trim().toUpperCase();
-    if (!placa || placa === 'SIN DATO') continue;
-    if (!idx[placa]) idx[placa] = [];
-    idx[placa].push(rec);
+    const n = normBusq(rec[campo]);
+    if (!datoValido(rec[campo], n)) continue;
+    (idx[n] = idx[n] || []).push(rec);
   }
   return idx;
 }
-let PLACA_IDX = buildPlacaIndex(DB);
-
-// ── Índice de teléfonos ─────────────────────────────────
-// El campo TELEFONO trae texto libre ("3315871188 NW 3323890097 WHATS"),
-// así que extraemos cada número y lo normalizamos a sus últimos 10 dígitos.
-// También se indexan los números que aparezcan en NOTAS (p. ej. "TEL. PERSONAL 33...").
-function normalizarTel(t) {
-  let d = String(t || '').replace(/\D/g, '');
-  if (d.length > 10) d = d.slice(-10);   // quita +52, 52, 1, etc.
-  return d;
-}
-function extraerTelefonos(texto) {
-  // Agrupa dígitos separados por espacio/guion/punto/paréntesis ("33 1234 5678"),
-  // pero corta al llegar a 10 dígitos para separar números pegados ("3338076820 3316989424").
-  const grupos = String(texto || '').match(/\d[\d\s\-().]*\d|\d/g) || [];
-  const out = [];
-  const agregar = buf => {
-    const d = normalizarTel(buf);
-    if (d.length >= 7 && !out.includes(d)) out.push(d);
-  };
-  for (const g of grupos) {
-    let buf = '';
-    for (const tok of g.match(/\d+/g)) {
-      if (buf.length >= 10) { agregar(buf); buf = ''; }
-      buf += tok;
-    }
-    agregar(buf);
-  }
-  return out;
-}
-function buildTelIndex(db) {
-  const lista = [];
-  for (const poliza in db) {
-    const rec = db[poliza];
-    const tels = extraerTelefonos(rec.TELEFONO);
-    const notas = extraerTelefonos(rec.NOTAS).filter(t => !tels.includes(t));
-    if (tels.length || notas.length) lista.push({ rec, tels, notas });
-  }
-  return lista;
-}
-let TEL_IDX = buildTelIndex(DB);
-
-function buscarPorTelefono(q) {
-  const d = normalizarTel(q);
-  if (d.length < 7) return { error: 'Escribe al menos 7 dígitos del teléfono' };
-  const exacto = d.length === 10;
-  const coincide = t => exacto ? t === d : t.includes(d);
-  const out = [];
-  for (const it of TEL_IDX) {
-    const enTel = it.tels.find(coincide);
-    const enNotas = enTel ? null : it.notas.find(coincide);
-    if (enTel || enNotas) out.push({ p: it.rec, tel: enTel || enNotas, fuente: enTel ? 'tel' : 'notas' });
-  }
-  // Primero coincidencias en TELEFONO, luego en NOTAS
-  out.sort((a, b) => (a.fuente === b.fuente ? 0 : a.fuente === 'tel' ? -1 : 1));
-  return { d, matches: out };
-}
+let PLACA_IDX = buildCampoIndex(DB, 'PLACAS');
+let SERIE_IDX = buildCampoIndex(DB, 'SERIE');
 
 // Rebuild index when DB changes
-function rebuildIndex() { PLACA_IDX = buildPlacaIndex(DB); TEL_IDX = buildTelIndex(DB); }
+function rebuildIndex() {
+  PLACA_IDX = buildCampoIndex(DB, 'PLACAS');
+  SERIE_IDX = buildCampoIndex(DB, 'SERIE');
+}
+
+// Búsqueda parcial: primero las que TERMINAN con el dato (lo usual con el VIN), luego las que lo contienen
+function buscarParcial(idx, qn) {
+  const fin = [], medio = [];
+  for (const k in idx) {
+    if (k === qn) continue;
+    if (k.endsWith(qn)) fin.push(...idx[k]);
+    else if (k.includes(qn)) medio.push(...idx[k]);
+  }
+  return fin.concat(medio);
+}
+
+const MODOS = {
+  todos:  { tab: 'tabTodos',  hint: 'hintRowTodos',  label: 'Póliza, placas, número de serie o nombre', ph: 'Escribe cualquier dato...' },
+  poliza: { tab: 'tabPoliza', hint: 'hintRow',       label: 'Número de Póliza',      ph: 'Ej. 0002J, 1234J...' },
+  placa:  { tab: 'tabPlaca',  hint: 'hintRowPlaca',  label: 'Número de Placa',       ph: 'Ej. JSR6621, JAF2785...' },
+  serie:  { tab: 'tabSerie',  hint: 'hintRowSerie',  label: 'Número de Serie (VIN)', ph: 'Serie completa o últimos 5+ caracteres...' },
+  nombre: { tab: 'tabNombre', hint: 'hintRowNombre', label: 'Nombre del Asegurado',  ph: 'Nombre completo o parcial...' }
+};
 
 function setMode(mode) {
+  if (!MODOS[mode]) mode = 'todos';
   searchMode = mode;
   const input = document.getElementById('polizaInput');
-  const label = document.getElementById('searchLabel');
-  const tabP = document.getElementById('tabPoliza');
-  const tabPl = document.getElementById('tabPlaca');
-  const tabN = document.getElementById('tabNombre');
-  const hintP = document.getElementById('hintRow');
-  const hintPl = document.getElementById('hintRowPlaca');
-  const hintN = document.getElementById('hintRowNombre');
-  const tabT = document.getElementById('tabTelefono');
-  const hintT = document.getElementById('hintRowTelefono');
-
-  tabP.classList.remove('active');
-  tabPl.classList.remove('active');
-  tabN.classList.remove('active');
-  tabT.classList.remove('active');
-  hintP.style.display = 'none';
-  hintPl.style.display = 'none';
-  hintN.style.display = 'none';
-  hintT.style.display = 'none';
-  input.inputMode = 'text';
-
-  if (mode === 'poliza') {
-    tabP.classList.add('active');
-    label.textContent = 'Número de Póliza';
-    input.placeholder = 'Ej. 0002J, 1234J...';
-    input.style.textTransform = 'uppercase';
-    hintP.style.display = '';
-  } else if (mode === 'placa') {
-    tabPl.classList.add('active');
-    label.textContent = 'Número de Placa';
-    input.placeholder = 'Ej. JSR6621, JAF2785...';
-    input.style.textTransform = 'uppercase';
-    hintPl.style.display = '';
-  } else if (mode === 'telefono') {
-    tabT.classList.add('active');
-    label.textContent = 'Teléfono del Cliente';
-    input.placeholder = 'Ej. 33 1234 5678';
-    input.style.textTransform = 'none';
-    input.inputMode = 'tel';
-    hintT.style.display = '';
-  } else {
-    tabN.classList.add('active');
-    label.textContent = 'Nombre del Asegurado';
-    input.placeholder = 'Nombre completo o parcial...';
-    input.style.textTransform = 'uppercase';
-    hintN.style.display = '';
+  for (const m in MODOS) {
+    document.getElementById(MODOS[m].tab).classList.toggle('active', m === mode);
+    document.getElementById(MODOS[m].hint).style.display = (m === mode) ? '' : 'none';
   }
+  document.getElementById('searchLabel').textContent = MODOS[mode].label;
+  input.placeholder = MODOS[mode].ph;
+  input.style.textTransform = 'uppercase';
 
   // Clear results
   document.getElementById('result').classList.remove('visible');
@@ -3028,8 +2973,74 @@ function fuzzySearchNombre(q, records, threshold = 0.35) {
   return scored.slice(0, 20).map(s => s.p);
 }
 
+// Muestra la lista de varias pólizas. items = [{ p, tag, exacta }]
+const MAX_LISTA = 200;
+function mostrarLista(titulo, items) {
+  const multi = document.getElementById('multiResults');
+  const list = document.getElementById('multiList');
+  document.getElementById('multiTitle').textContent = titulo;
+  document.getElementById('multiBadge').textContent = items.length + ' resultado' + (items.length !== 1 ? 's' : '');
+  list.innerHTML = '';
+  items.slice(0, MAX_LISTA).forEach(({ p, tag, exacta }) => {
+    const cls = statusClass(p.ESTATUS);
+    const serie = (tag === 'Serie' && p.SERIE) ? ' · Serie ' + p.SERIE : '';
+    const placa = (tag === 'Placas' && p.PLACAS) ? ' · Placas ' + p.PLACAS : '';
+    const div = document.createElement('div');
+    div.className = 'multi-item';
+    div.innerHTML = `
+      <div class="multi-item-dot dot-${cls}"></div>
+      <div class="multi-item-info">
+        <div class="multi-item-poliza">${p.POLIZA}</div>
+        <div class="multi-item-nombre">${p.NOMBRE || 'Sin nombre'}${tag ? `<span class="match-tag${exacta ? ' exacta' : ''}">Coincide en: ${tag}</span>` : ''}</div>
+        <div class="multi-item-meta">${p.MARCA || ''} ${p.MODELO || ''}${placa}${serie} · ${p['INICIO VIGENCIA'] || ''} – ${p['TERMINO VIGENCIA'] || ''}</div>
+      </div>
+      <div class="multi-item-estatus ${cls}">${p.ESTATUS}</div>
+      <div class="multi-item-arrow">›</div>`;
+    div.onclick = () => mostrarPoliza(p);
+    list.appendChild(div);
+  });
+  if (items.length > MAX_LISTA) {
+    list.insertAdjacentHTML('beforeend', `<div class="multi-more">Se muestran los primeros ${MAX_LISTA} de ${items.length}. Escribe un dato más específico.</div>`);
+  }
+  _lastMultiResults = { title: titulo, badge: document.getElementById('multiBadge').textContent, html: list.innerHTML };
+  multi.style.display = 'block';
+  multi.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function sinResultados(titulo, msg) {
+  document.getElementById('nfTitle').textContent = titulo;
+  document.getElementById('nfMsg').textContent = msg || 'Verifica el dato e intenta de nuevo';
+  document.getElementById('notFound').classList.add('visible');
+}
+
+// Una sola póliza → se abre directo; varias → lista
+function entregar(items, titulo) {
+  if (items.length === 1) { mostrarPoliza(items[0].p); return; }
+  mostrarLista(titulo, items);
+}
+
+// Agrega sin repetir pólizas (si una ya entró por un criterio mejor, se respeta ese)
+function agregarUnicos(destino, vistos, lista, tag, exacta) {
+  for (const p of lista) {
+    if (vistos.has(p.POLIZA)) continue;
+    vistos.add(p.POLIZA);
+    destino.push({ p, tag, exacta });
+  }
+}
+
+function buscarNombre(q) {
+  let matches = Object.values(DB).filter(p => (p.NOMBRE || '').toUpperCase().includes(q));
+  let fuzzy = false;
+  if (matches.length === 0 && q.length >= 3) {
+    matches = fuzzySearchNombre(q, Object.values(DB));
+    fuzzy = matches.length > 0;
+  }
+  return { matches, fuzzy };
+}
+
 function buscar() {
   const q = document.getElementById('polizaInput').value.trim().toUpperCase();
+  const qn = normBusq(q);
   const nf = document.getElementById('notFound');
   const res = document.getElementById('result');
   const multi = document.getElementById('multiResults');
@@ -3043,139 +3054,81 @@ function buscar() {
 
   if (!q) return;
 
-  // ── Nombre search (fuzzy) ────────────────────────
-  if (searchMode === 'nombre') {
-    const exactMatches = Object.values(DB).filter(p =>
-      (p.NOMBRE || '').toUpperCase().includes(q)
-    );
-    // Si hay resultados exactos los usamos; si no, buscamos difuso
-    let matches = exactMatches;
+  // ── Todos los campos ─────────────────────────────────
+  if (searchMode === 'todos') {
+    const vistos = new Set();
+    // Nivel 1: coincidencias exactas (póliza, placas, serie)
+    const exactas = [];
+    if (DB[q]) agregarUnicos(exactas, vistos, [DB[q]], 'Póliza', true);
+    if (qn) {
+      agregarUnicos(exactas, vistos, PLACA_IDX[qn] || [], 'Placas', true);
+      agregarUnicos(exactas, vistos, SERIE_IDX[qn] || [], 'Serie', true);
+    }
+    if (exactas.length) { entregar(exactas, 'Coincidencias exactas para "' + q + '"'); return; }
+
+    // Nivel 2: parcial de serie / placas  ·  Nivel 3: nombre
+    const items = [];
+    if (qn.length >= MIN_PARCIAL) {
+      agregarUnicos(items, vistos, buscarParcial(SERIE_IDX, qn), 'Serie', false);
+      agregarUnicos(items, vistos, buscarParcial(PLACA_IDX, qn), 'Placas', false);
+    }
     let fuzzyUsed = false;
-    if (matches.length === 0 && q.length >= 3) {
-      const fuzzy = fuzzySearchNombre(q, Object.values(DB));
-      if (fuzzy.length > 0) { matches = fuzzy; fuzzyUsed = true; }
+    if (/[A-ZÑ]{3,}/.test(q)) {
+      const nom = buscarNombre(q);
+      // el difuso solo si nada más encontró resultados (evita ruido)
+      if (!nom.fuzzy || items.length === 0) {
+        agregarUnicos(items, vistos, nom.matches, nom.fuzzy ? 'Nombre (similar)' : 'Nombre', false);
+        fuzzyUsed = nom.fuzzy;
+      }
     }
-    if (matches.length === 0) {
-      document.getElementById('nfTitle').textContent = 'Nombre no encontrado';
-      nf.classList.add('visible');
+    if (!items.length) {
+      sinResultados('Sin resultados', qn.length < MIN_PARCIAL
+        ? 'No hay póliza, placa o serie exacta con ese dato. Para búsqueda parcial escribe al menos ' + MIN_PARCIAL + ' caracteres.'
+        : 'No se encontró en póliza, placas, serie ni nombre.');
       return;
     }
-    if (matches.length === 1) {
-      mostrarPoliza(matches[0]);
-      return;
-    }
-    document.getElementById('multiTitle').textContent = fuzzyUsed
-      ? 'Resultados similares a "' + q + '" 🔍'
-      : 'Resultados para "' + q + '"';
-    document.getElementById('multiBadge').textContent = matches.length + ' resultado' + (matches.length !== 1 ? 's' : '');
-    const list = document.getElementById('multiList');
-    list.innerHTML = '';
-    matches.forEach(p => {
-      const cls = statusClass(p.ESTATUS);
-      const div = document.createElement('div');
-      div.className = 'multi-item';
-      div.innerHTML = `
-        <div class="multi-item-dot dot-${cls}"></div>
-        <div class="multi-item-info">
-          <div class="multi-item-poliza">${p.POLIZA}</div>
-          <div class="multi-item-nombre">${p.NOMBRE || 'Sin nombre'}</div>
-          <div class="multi-item-meta">${p.MARCA || ''} ${p.MODELO || ''} · ${p['INICIO VIGENCIA'] || ''} – ${p['TERMINO VIGENCIA'] || ''}</div>
-        </div>
-        <div class="multi-item-estatus ${cls}">${p.ESTATUS}</div>
-        <div class="multi-item-arrow">›</div>`;
-      div.onclick = () => mostrarPoliza(p);
-      list.appendChild(div);
-    });
-    _lastMultiResults = { title: document.getElementById('multiTitle').textContent, badge: document.getElementById('multiBadge').textContent, html: list.innerHTML };
-    multi.style.display = 'block';
-    multi.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    entregar(items, (fuzzyUsed ? 'Resultados similares a "' : 'Resultados para "') + q + '"');
     return;
   }
 
-  // ── Teléfono search ───────────────────────────────────
-  if (searchMode === 'telefono') {
-    const r = buscarPorTelefono(q);
-    if (r.error || r.matches.length === 0) {
-      document.getElementById('nfTitle').textContent = r.error || 'Teléfono no encontrado';
-      nf.classList.add('visible');
+  // ── Serie ────────────────────────────────────────────
+  if (searchMode === 'serie') {
+    const exactas = SERIE_IDX[qn] || [];
+    if (exactas.length) {
+      entregar(exactas.map(p => ({ p, tag: 'Serie', exacta: true })), 'Pólizas con serie ' + q);
       return;
     }
-    if (r.matches.length === 1) {
-      mostrarPoliza(r.matches[0].p);
+    if (qn.length < MIN_PARCIAL) {
+      sinResultados('Serie no encontrada', 'Escribe la serie completa o al menos ' + MIN_PARCIAL + ' caracteres para buscar parcial.');
       return;
     }
-    document.getElementById('multiTitle').textContent = 'Pólizas con teléfono ' + r.d;
-    document.getElementById('multiBadge').textContent = r.matches.length + ' resultados';
-    const list = document.getElementById('multiList');
-    list.innerHTML = '';
-    r.matches.forEach(({ p, tel, fuente }) => {
-      const cls = statusClass(p.ESTATUS);
-      const div = document.createElement('div');
-      div.className = 'multi-item';
-      div.innerHTML = `
-        <div class="multi-item-dot dot-${cls}"></div>
-        <div class="multi-item-info">
-          <div class="multi-item-poliza">${p.POLIZA}</div>
-          <div class="multi-item-nombre">${p.NOMBRE || 'Sin nombre'}</div>
-          <div class="multi-item-meta"><span class="tel-match">📞 ${tel}${fuente === 'notas' ? ' (en notas)' : ''}</span> · ${p.MARCA || ''} ${p.MODELO || ''} · ${p['INICIO VIGENCIA'] || ''} – ${p['TERMINO VIGENCIA'] || ''}</div>
-        </div>
-        <div class="multi-item-estatus ${cls}">${p.ESTATUS}</div>
-        <div class="multi-item-arrow">›</div>`;
-      div.onclick = () => mostrarPoliza(p);
-      list.appendChild(div);
-    });
-    _lastMultiResults = { title: document.getElementById('multiTitle').textContent, badge: document.getElementById('multiBadge').textContent, html: list.innerHTML };
-    multi.style.display = 'block';
-    multi.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const parciales = buscarParcial(SERIE_IDX, qn);
+    if (!parciales.length) { sinResultados('Serie no encontrada'); return; }
+    entregar(parciales.map(p => ({ p, tag: 'Serie', exacta: false })), 'Series que contienen "' + q + '"');
+    return;
+  }
+
+  // ── Nombre search (fuzzy) ────────────────────────
+  if (searchMode === 'nombre') {
+    const { matches, fuzzy } = buscarNombre(q);
+    if (matches.length === 0) { sinResultados('Nombre no encontrado'); return; }
+    entregar(matches.map(p => ({ p })), fuzzy
+      ? 'Resultados similares a "' + q + '" 🔍'
+      : 'Resultados para "' + q + '"');
     return;
   }
 
   // ── Placa search ──────────────────────────────────────
   if (searchMode === 'placa') {
-    const matches = PLACA_IDX[q] || [];
-    if (matches.length === 0) {
-      document.getElementById('nfTitle').textContent = 'Placa no encontrada';
-      nf.classList.add('visible');
-      return;
-    }
-    if (matches.length === 1) {
-      mostrarPoliza(matches[0]);
-      return;
-    }
-    // Multiple results
-    document.getElementById('multiTitle').textContent = 'Pólizas con placa ' + q;
-    document.getElementById('multiBadge').textContent = matches.length + ' resultados';
-    const list = document.getElementById('multiList');
-    list.innerHTML = '';
-    matches.forEach(p => {
-      const cls = statusClass(p.ESTATUS);
-      const div = document.createElement('div');
-      div.className = 'multi-item';
-      div.innerHTML = `
-        <div class="multi-item-dot dot-${cls}"></div>
-        <div class="multi-item-info">
-          <div class="multi-item-poliza">${p.POLIZA}</div>
-          <div class="multi-item-nombre">${p.NOMBRE || 'Sin nombre'}</div>
-          <div class="multi-item-meta">${p.MARCA || ''} ${p.MODELO || ''} · ${p['INICIO VIGENCIA'] || ''} – ${p['TERMINO VIGENCIA'] || ''}</div>
-        </div>
-        <div class="multi-item-estatus ${cls}">${p.ESTATUS}</div>
-        <div class="multi-item-arrow">›</div>`;
-      div.onclick = () => mostrarPoliza(p);
-      list.appendChild(div);
-    });
-    _lastMultiResults = { title: document.getElementById('multiTitle').textContent, badge: document.getElementById('multiBadge').textContent, html: list.innerHTML };
-    multi.style.display = 'block';
-    multi.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const matches = PLACA_IDX[qn] || [];
+    if (matches.length === 0) { sinResultados('Placa no encontrada'); return; }
+    entregar(matches.map(p => ({ p })), 'Pólizas con placa ' + q);
     return;
   }
 
   // ── Poliza search ─────────────────────────────────────
   const p = DB[q];
-  if (!p) {
-    document.getElementById('nfTitle').textContent = 'Póliza no encontrada';
-    nf.classList.add('visible');
-    return;
-  }
+  if (!p) { sinResultados('Póliza no encontrada'); return; }
   mostrarPoliza(p);
 }
 
@@ -3449,6 +3402,12 @@ function demo(p) {
 function demoPlaca(p) {
   if (searchMode !== 'placa') setMode('placa');
   document.getElementById('polizaInput').value = p;
+  buscar();
+}
+
+function demoSerie(v) {
+  if (searchMode !== 'serie') setMode('serie');
+  document.getElementById('polizaInput').value = v;
   buscar();
 }
 
