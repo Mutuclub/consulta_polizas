@@ -781,6 +781,7 @@
     font-weight: 600;
     letter-spacing: 0.03em;
     vertical-align: middle;
+    white-space: nowrap;
     background: var(--surface2);
     border: 1px solid var(--border);
     color: var(--muted);
@@ -1528,7 +1529,7 @@
       <span>SISTEMA DE PÓLIZAS</span>
     </div>
     <h1>Consulta de<br>Pólizas</h1>
-    <p class="subtitle">Busca por póliza, placas, número de serie o nombre</p>
+    <p class="subtitle">Busca por póliza, placas, número de serie, nombre o celular</p>
   </header>
 
   
@@ -1747,14 +1748,18 @@
       <button class="mode-tab" id="tabPlaca" onclick="setMode('placa')">🚗 Placa</button>
       <button class="mode-tab" id="tabSerie" onclick="setMode('serie')">🔢 Serie</button>
       <button class="mode-tab" id="tabNombre" onclick="setMode('nombre')">👤 Nombre</button>
+      <button class="mode-tab" id="tabTelefono" onclick="setMode('telefono')">📱 Celular</button>
     </div>
-    <span class="search-label" id="searchLabel">Póliza, placas, número de serie o nombre</span>
+    <span class="search-label" id="searchLabel">Póliza, placas, serie, nombre o celular</span>
     <div class="search-row">
       <input type="text" class="search-input" id="polizaInput" placeholder="Escribe cualquier dato..." autocomplete="off" autocorrect="off" spellcheck="false" style="text-transform:uppercase">
       <button class="btn-search" onclick="buscar()">Buscar</button>
     </div>
     <div class="hint-row" id="hintRowTodos">
-      <span class="hint-label">Busca en todos los campos a la vez. Para la serie bastan los últimos 6 caracteres.</span>
+      <span class="hint-label">Busca en todos los campos a la vez. Para la serie bastan los últimos 6 caracteres; para el celular, los 10 dígitos o los últimos 7.</span>
+    </div>
+    <div class="hint-row" id="hintRowTelefono" style="display:none">
+      <span class="hint-label">Número a 10 dígitos, o al menos los últimos 7. Se ignoran espacios, guiones y +52.</span>
     </div>
     <div class="hint-row" id="hintRowSerie" style="display:none">
       <span class="hint-label">Serie completa o los últimos 5+ caracteres:</span>
@@ -2815,10 +2820,49 @@ function buildCampoIndex(db, campo) {
 let PLACA_IDX = buildCampoIndex(DB, 'PLACAS');
 let SERIE_IDX = buildCampoIndex(DB, 'SERIE');
 
+// ── Teléfonos: un campo puede traer 2 números ("3334881404 3336564004" o pegados)
+const MIN_TEL_PARCIAL = 7;
+function soloDigitos(v) { return String(v == null ? '' : v).replace(/\D/g, ''); }
+// Deja el número a 10 dígitos (quita 52 / 044 / 045 al inicio)
+function tel10(d) { return d.length > 10 ? d.slice(-10) : d; }
+function extraerTelefonos(raw) {
+  const out = [];
+  String(raw || '').split(/\D+/).forEach(g => {
+    if (!g) return;
+    if (g.length === 20) { out.push(g.slice(0, 10), g.slice(10)); return; } // dos números pegados
+    if (g.length >= MIN_TEL_PARCIAL) out.push(tel10(g));
+  });
+  return [...new Set(out)];
+}
+function buildTelIndex(db) {
+  const idx = {};
+  for (const poliza in db) {
+    const rec = db[poliza];
+    for (const t of extraerTelefonos(rec.TELEFONO)) (idx[t] = idx[t] || []).push(rec);
+  }
+  return idx;
+}
+let TEL_IDX = buildTelIndex(DB);
+// Celular capturado → {exacto, parcial}. Solo aplica si el texto es numérico.
+function telDeConsulta(q) {
+  if (!/^[\d\s\-\+\(\)\.]+$/.test(q)) return null;
+  const d = soloDigitos(q);
+  if (d.length < MIN_TEL_PARCIAL) return { d, corto: true };
+  return { d: tel10(d), corto: false };
+}
+function buscarTelefono(q) {
+  const t = telDeConsulta(q);
+  if (!t || t.corto) return { exactas: [], parciales: [], corto: !!t };
+  const exactas = t.d.length === 10 ? (TEL_IDX[t.d] || []) : [];
+  const parciales = exactas.length ? [] : buscarParcial(TEL_IDX, t.d);
+  return { exactas, parciales, corto: false };
+}
+
 // Rebuild index when DB changes
 function rebuildIndex() {
   PLACA_IDX = buildCampoIndex(DB, 'PLACAS');
   SERIE_IDX = buildCampoIndex(DB, 'SERIE');
+  TEL_IDX = buildTelIndex(DB);
 }
 
 // Búsqueda parcial: primero las que TERMINAN con el dato (lo usual con el VIN), luego las que lo contienen
@@ -2833,11 +2877,12 @@ function buscarParcial(idx, qn) {
 }
 
 const MODOS = {
-  todos:  { tab: 'tabTodos',  hint: 'hintRowTodos',  label: 'Póliza, placas, número de serie o nombre', ph: 'Escribe cualquier dato...' },
+  todos:  { tab: 'tabTodos',  hint: 'hintRowTodos',  label: 'Póliza, placas, serie, nombre o celular', ph: 'Escribe cualquier dato...' },
   poliza: { tab: 'tabPoliza', hint: 'hintRow',       label: 'Número de Póliza',      ph: 'Ej. 0002J, 1234J...' },
   placa:  { tab: 'tabPlaca',  hint: 'hintRowPlaca',  label: 'Número de Placa',       ph: 'Ej. JSR6621, JAF2785...' },
   serie:  { tab: 'tabSerie',  hint: 'hintRowSerie',  label: 'Número de Serie (VIN)', ph: 'Serie completa o últimos 5+ caracteres...' },
-  nombre: { tab: 'tabNombre', hint: 'hintRowNombre', label: 'Nombre del Asegurado',  ph: 'Nombre completo o parcial...' }
+  nombre: { tab: 'tabNombre', hint: 'hintRowNombre', label: 'Nombre del Asegurado',  ph: 'Nombre completo o parcial...' },
+  telefono: { tab: 'tabTelefono', hint: 'hintRowTelefono', label: 'Número de Celular / Teléfono', ph: 'Ej. 33 1234 5678' }
 };
 
 function setMode(mode) {
@@ -2985,6 +3030,7 @@ function mostrarLista(titulo, items) {
     const cls = statusClass(p.ESTATUS);
     const serie = (tag === 'Serie' && p.SERIE) ? ' · Serie ' + p.SERIE : '';
     const placa = (tag === 'Placas' && p.PLACAS) ? ' · Placas ' + p.PLACAS : '';
+    const tel = (tag === 'Celular' && p.TELEFONO) ? ' · Tel ' + p.TELEFONO : '';
     const div = document.createElement('div');
     div.className = 'multi-item';
     div.innerHTML = `
@@ -2992,7 +3038,7 @@ function mostrarLista(titulo, items) {
       <div class="multi-item-info">
         <div class="multi-item-poliza">${p.POLIZA}</div>
         <div class="multi-item-nombre">${p.NOMBRE || 'Sin nombre'}${tag ? `<span class="match-tag${exacta ? ' exacta' : ''}">Coincide en: ${tag}</span>` : ''}</div>
-        <div class="multi-item-meta">${p.MARCA || ''} ${p.MODELO || ''}${placa}${serie} · ${p['INICIO VIGENCIA'] || ''} – ${p['TERMINO VIGENCIA'] || ''}</div>
+        <div class="multi-item-meta">${p.MARCA || ''} ${p.MODELO || ''}${placa}${serie}${tel} · ${p['INICIO VIGENCIA'] || ''} – ${p['TERMINO VIGENCIA'] || ''}</div>
       </div>
       <div class="multi-item-estatus ${cls}">${p.ESTATUS}</div>
       <div class="multi-item-arrow">›</div>`;
@@ -3064,6 +3110,8 @@ function buscar() {
       agregarUnicos(exactas, vistos, PLACA_IDX[qn] || [], 'Placas', true);
       agregarUnicos(exactas, vistos, SERIE_IDX[qn] || [], 'Serie', true);
     }
+    const telRes = buscarTelefono(q);
+    agregarUnicos(exactas, vistos, telRes.exactas, 'Celular', true);
     if (exactas.length) { entregar(exactas, 'Coincidencias exactas para "' + q + '"'); return; }
 
     // Nivel 2: parcial de serie / placas  ·  Nivel 3: nombre
@@ -3072,6 +3120,7 @@ function buscar() {
       agregarUnicos(items, vistos, buscarParcial(SERIE_IDX, qn), 'Serie', false);
       agregarUnicos(items, vistos, buscarParcial(PLACA_IDX, qn), 'Placas', false);
     }
+    agregarUnicos(items, vistos, telRes.parciales, 'Celular', false);
     let fuzzyUsed = false;
     if (/[A-ZÑ]{3,}/.test(q)) {
       const nom = buscarNombre(q);
@@ -3084,7 +3133,7 @@ function buscar() {
     if (!items.length) {
       sinResultados('Sin resultados', qn.length < MIN_PARCIAL
         ? 'No hay póliza, placa o serie exacta con ese dato. Para búsqueda parcial escribe al menos ' + MIN_PARCIAL + ' caracteres.'
-        : 'No se encontró en póliza, placas, serie ni nombre.');
+        : 'No se encontró en póliza, placas, serie, nombre ni celular.');
       return;
     }
     entregar(items, (fuzzyUsed ? 'Resultados similares a "' : 'Resultados para "') + q + '"');
@@ -3105,6 +3154,18 @@ function buscar() {
     const parciales = buscarParcial(SERIE_IDX, qn);
     if (!parciales.length) { sinResultados('Serie no encontrada'); return; }
     entregar(parciales.map(p => ({ p, tag: 'Serie', exacta: false })), 'Series que contienen "' + q + '"');
+    return;
+  }
+
+  // ── Celular / teléfono ───────────────────────────────
+  if (searchMode === 'telefono') {
+    const t = telDeConsulta(q);
+    if (!t) { sinResultados('Celular no válido', 'Escribe solo números (se permiten espacios y guiones).'); return; }
+    if (t.corto) { sinResultados('Celular no encontrado', 'Escribe los 10 dígitos o al menos los últimos ' + MIN_TEL_PARCIAL + '.'); return; }
+    const r = buscarTelefono(q);
+    if (r.exactas.length) { entregar(r.exactas.map(p => ({ p, tag: 'Celular', exacta: true })), 'Pólizas con celular ' + t.d); return; }
+    if (!r.parciales.length) { sinResultados('Celular no encontrado'); return; }
+    entregar(r.parciales.map(p => ({ p, tag: 'Celular', exacta: false })), 'Celulares que contienen "' + t.d + '"');
     return;
   }
 
