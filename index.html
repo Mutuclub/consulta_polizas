@@ -2859,7 +2859,42 @@ function buscarTelefono(q) {
 }
 
 // Rebuild index when DB changes
+/* ── Estatus en TIEMPO REAL ──────────────────────────────────────────────
+   El estatus depende de la fecha de hoy, así que no se confía en el valor
+   guardado (localStorage o columna ESTATUS del Excel, que se quedan viejos).
+   Se recalcula con la misma regla validada (_mutualEstatus) cada vez que se
+   carga la base y cada vez que se muestra una póliza. Si faltan datos
+   (costo, mensualidad o inicio de vigencia) se respeta el estatus guardado.
+   Las CANCELADAS MANUALMENTE nunca se recalculan. */
+function _fechaDMY(s){
+  if (s instanceof Date) return isNaN(s) ? null : s;
+  var pts = String(s||'').trim().split('/');
+  if (pts.length !== 3) return null;
+  var d = new Date(parseInt(pts[2],10), parseInt(pts[1],10)-1, parseInt(pts[0],10));
+  return isNaN(d) ? null : d;
+}
+function estatusTiempoReal(p){
+  if (!p || !Array.isArray(p.PAGOS)) return p;
+  if (String(p.ESTATUS||'').toUpperCase().indexOf('CANCELADA MANUAL') >= 0) return p;
+  var costo = parseMoney(p.COSTO), mensual = parseMoney(p['PAGO MENSUAL']);
+  var inicial = parseMoney(p['PAGO INICIAL']) || 0;
+  var ini = _fechaDMY(p['INICIO VIGENCIA']);
+  if (!(costo > 0) || !(mensual > 0) || !ini) return p;
+  var suma = p.PAGOS.reduce(function(s,x){
+    if (String(x.recibo||'').trim().toUpperCase() === 'INICIAL') return s;
+    return s + (parseMoney(x.monto) || 0);
+  }, 0);
+  var est = _mutualEstatus(costo, inicial, mensual, ini, suma);
+  p.ESTATUS = est.e;
+  p['NOTAS ESTATUS'] = est.n;
+  return p;
+}
+function recalcularEstatusDB(){
+  for (var k in DB) { try { estatusTiempoReal(DB[k]); } catch(e) {} }
+}
+
 function rebuildIndex() {
+  recalcularEstatusDB();
   PLACA_IDX = buildCampoIndex(DB, 'PLACAS');
   SERIE_IDX = buildCampoIndex(DB, 'SERIE');
   TEL_IDX = buildTelIndex(DB);
@@ -3027,6 +3062,7 @@ function mostrarLista(titulo, items) {
   document.getElementById('multiBadge').textContent = items.length + ' resultado' + (items.length !== 1 ? 's' : '');
   list.innerHTML = '';
   items.slice(0, MAX_LISTA).forEach(({ p, tag, exacta }) => {
+    estatusTiempoReal(p);
     const cls = statusClass(p.ESTATUS);
     const serie = (tag === 'Serie' && p.SERIE) ? ' · Serie ' + p.SERIE : '';
     const placa = (tag === 'Placas' && p.PLACAS) ? ' · Placas ' + p.PLACAS : '';
@@ -3361,6 +3397,7 @@ function renderPagos(p){
 }
 
 function mostrarPoliza(p) {
+  estatusTiempoReal(p);
   _currentPoliza = p;
   const res = document.getElementById('result');
 
