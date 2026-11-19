@@ -2590,8 +2590,11 @@ function _mutualEstatus(costo, inicial, mensual, inicioDate, sumaPagos){
   var vN = Math.ceil((m - (sumaPagos/mensual)) - 1e-9);
   if (vN <= 0) return {e:'VIGENTE', n:'AL CORRIENTE DE SUS PAGOS'};
   var pesos = function(x){ return '$'+Number(x).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2}); };
-  if (vN === 1) return {e:'ATRASADA', n:'ATRASADA CON '+pesos(mensual)+' / 1 PAGO(S) ATRASADO(S)'};
-  if (vN === 2) return {e:'PROBLEMA', n:'PROBLEMA: '+pesos(2*mensual)+' / 2 PAGO(S) ATRASADO(S)'};
+  // Monto vencido REAL = mensualidades que ya debían estar pagadas − lo abonado
+  // (con pagos parciales puede ser menor a la mensualidad; nunca mayor al saldo).
+  var vencidoReal = Math.min(saldo, Math.max(0, m*mensual - sumaPagos));
+  if (vN === 1) return {e:'ATRASADA', n:'ATRASADA CON '+pesos(vencidoReal)+' / 1 PAGO(S) ATRASADO(S)'};
+  if (vN === 2) return {e:'PROBLEMA', n:'PROBLEMA: '+pesos(vencidoReal)+' / 2 PAGO(S) ATRASADO(S)'};
   var N = Math.round(saldo/mensual);
   return {e:'CANCELADA POR FALTA DE PAGO', n:'CANCELADA POR FALTA DE PAGO. SALDO DEUDOR PENDIENTE DE PAGO '+pesos(saldo)+' / '+N+' PAGO(S) NO REALIZADO(S)'};
 }
